@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b12;
+    --bg2: #0d1520;
+    --grid-bg: #080e18;
+    --cell-empty: #111d2a;
+    --cell-empty-border: #2a3d52;
+    --standby: #00e5a0;
+    --standby-glow: rgba(0,229,160,0.25);
+    --checked: #ff4d8d;
+    --checked-glow: rgba(255,77,141,0.25);
+    --sevenday: #3d9bff;
+    --sevenday-glow: rgba(61,155,255,0.2);
+    --stopped: #445060;
+    --stopped-border: #2a3545;
+    --text-primary: #c8dff0;
+    --text-dim: #8aafc4;
+    --text-bright: #e8f4ff;
+    --accent: #00e5a0;
+    --accent2: #3d9bff;
+    --self: #ffe04d;
+    --self-glow: rgba(255,224,77,0.4);
+    --header-h: 52px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: 'Courier New', 'Hiragino Kaku Gothic ProN', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ヘッダー */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: var(--header-h);
+    background: rgba(7,11,18,0.95);
+    border-bottom: 1px solid #1a2d40;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+
+  .header-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .header-area {
+    font-size: 15px;
+    color: var(--text-bright);
+    font-weight: bold;
+    letter-spacing: 0.05em;
+  }
+
+  .header-stats {
+    margin-left: auto;
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .stat-item span {
+    color: var(--text-primary);
+    font-weight: bold;
+  }
+
+  /* スキャンライン演出 */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,229,160,0.012) 2px,
+      rgba(0,229,160,0.012) 4px
+    );
+    pointer-events: none;
+    z-index: 200;
+  }
+
+  /* メインコンテンツ */
+  .main {
+    padding-top: calc(var(--header-h) + 12px);
+    padding-bottom: 24px;
+    overflow-x: auto;
+    overflow-y: auto;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ハニカムグリッドコンテナ */
+  .hex-grid {
+    position: relative;
+    margin: 0 auto;
+    /* JSで幅・高さをセット */
+  }
+
+  /* 六角形セル（SVGで描画） */
+  .hex-svg {
+    position: absolute;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+
+  .hex-svg:active {
+    filter: brightness(1.3);
+  }
+
+  /* セルラベル */
+  .hex-label {
+    position: absolute;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .hex-name {
+    font-size: 10px;
+    font-family: 'Noto Sans JP', sans-serif;
+    color: var(--text-dim);
+    letter-spacing: -0.02em;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: normal;
+    word-break: break-all;
+    text-align: center;
+    padding: 0 2px;
+    line-height: 1.2;
+  }
+
+  .hex-count {
+    font-size: 10px;
+    font-weight: bold;
+    margin-top: 1px;
+  }
+
+  /* 現在地点滅 */
+  @keyframes selfPulse {
+    0%, 100% { opacity: 1; filter: drop-shadow(0 0 6px var(--self)) brightness(1.2); }
+    50% { opacity: 0.5; filter: drop-shadow(0 0 2px var(--self)) brightness(0.8); }
+  }
+
+  .hex-self .hex-svg {
+    animation: selfPulse 1.2s ease-in-out infinite;
+  }
+
+  /* standby グロー */
+  @keyframes standbyGlow {
+    0%, 100% { filter: drop-shadow(0 0 4px var(--standby-glow)); }
+    50% { filter: drop-shadow(0 0 8px var(--standby)); }
+  }
+
+  .hex-standby .hex-svg {
+    animation: standbyGlow 3s ease-in-out infinite;
+  }
+
+
+
+  /* ミニマップ */
+  .minimap {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    width: 120px;
+    height: 120px;
+    background: rgba(7,11,18,0.92);
+    border: 1px solid #1a2d40;
+    border-radius: 6px;
+    overflow: hidden;
+    z-index: 100;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+  }
+
+  .minimap canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .minimap-viewport {
+    position: absolute;
+    border: 1px solid rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.06);
+    pointer-events: none;
+    border-radius: 2px;
+  }
+  .detail-panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--bg2);
+    border-top: 1px solid #1a2d40;
+    border-radius: 16px 16px 0 0;
+    padding: 16px;
+    transform: translateY(100%);
+    transition: transform 0.25s cubic-bezier(0.32,0.72,0,1);
+    z-index: 150;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .detail-panel.show {
+    transform: translateY(0);
+  }
+
+  .detail-handle {
+    width: 36px; height: 4px;
+    background: #2a3d50;
+    border-radius: 2px;
+    margin: 0 auto 14px;
+  }
+
+  .detail-station {
+    font-size: 14px;
+    font-weight: bold;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+
+  .detail-cd {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+  }
+
+  .detail-vehicles {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .vehicle-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid #1a2d40;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .vehicle-status {
+    width: 6px;
+    height: 36px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .vehicle-info { flex: 1; }
+
+  .vehicle-plate {
+    font-size: 13px;
+    font-weight: bold;
+    color: var(--text-bright);
+    letter-spacing: 0.05em;
+  }
+
+  .vehicle-model {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .vehicle-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .btn-small {
+    padding: 5px 8px;
+    font-size: 10px;
+    border: 1px solid;
+    border-radius: 4px;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+
+  .btn-check { border-color: var(--standby); color: var(--standby); }
+  .btn-tire { border-color: var(--accent2); color: var(--accent2); }
+  .btn-tma { border-color: #aa88ff; color: #aa88ff; }
+
+  .detail-nav {
+    position: absolute;
+    top: 16px; right: 16px;
+    padding: 6px 12px;
+    font-size: 11px;
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    background: transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.08em;
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 140;
+    display: none;
+  }
+  .overlay.show { display: block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">JKS-II</div>
+  <div class="header-area">多摩市</div>
+  <div class="header-stats">
+    <div class="stat-item">standby <span id="cnt-standby">—</span></div>
+    <div class="stat-item">checked <span id="cnt-checked">—</span></div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="hex-grid" id="hexGrid"></div>
+</div>
+
+
+
+<div class="minimap" id="minimap">
+  <canvas id="minimapCanvas"></canvas>
+  <div class="minimap-viewport" id="minimapViewport"></div>
+</div>
+
+<div class="overlay" id="overlay" onclick="closeDetail()"></div>
+
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-handle"></div>
+  <button class="detail-nav" id="navBtn" onclick="openNav()">▶ ナビ</button>
+  <div class="detail-station" id="detailStation">—</div>
+  <div class="detail-cd" id="detailCd">—</div>
+  <div class="detail-vehicles" id="detailVehicles"></div>
+</div>
+
+<script>
+// ===== 座標→ハニカム変換済みステーションデータ =====
+const STATIONS = [
+  {station_name:"パトリア桜ヶ丘",stationCd:"RB27",lat:35.65285,lng:139.44469,q:15,r:1},
+  {station_name:"ＵＲプラザ永山",stationCd:"BH51",lat:35.63182,lng:139.44723,q:16,r:9},
+  {station_name:"ＡＯＫＩ聖蹟桜ヶ丘店",stationCd:"QG74",lat:35.65185,lng:139.43947,q:13,r:2},
+  {station_name:"アヴァンセ唐木田",stationCd:"LP58",lat:35.61578,lng:139.40835,q:0,r:24},
+  {station_name:"多摩センター第３駐車場（小田急）",stationCd:"EA24",lat:35.62624,lng:139.42718,q:8,r:16},
+  {station_name:"永山第７駐車場（小田急）",stationCd:"DN35",lat:35.62993,lng:139.43904,q:13,r:12},
+  {station_name:"コメット",stationCd:"OJ88",lat:35.60979,lng:139.42806,q:8,r:23},
+  {station_name:"聖蹟桜ヶ丘駅北第２",stationCd:"OX67",lat:35.65252,lng:139.44595,q:16,r:1},
+  {station_name:"聖蹟桜ヶ丘東寺方１丁目",stationCd:"HH60",lat:35.64819,lng:139.44258,q:14,r:3},
+  {station_name:"聖蹟桜ヶ丘モーリン駐車場",stationCd:"MC65",lat:35.64960,lng:139.44426,q:15,r:2},
+  {station_name:"聖蹟桜ヶ丘ルートストレージ",stationCd:"KX72",lat:35.65050,lng:139.45317,q:19,r:0},
+  {station_name:"タイムズ天本病院",stationCd:"QG60",lat:35.62220,lng:139.41341,q:3,r:20},
+  {station_name:"タイムズガーデンヒルズ聖蹟桜ヶ丘",stationCd:"MF91",lat:35.65181,lng:139.44037,q:12,r:2},
+  {station_name:"タイムズ聖蹟桜ヶ丘駅北",stationCd:"LM14",lat:35.65236,lng:139.44887,q:17,r:0},
+  {station_name:"タイムズ聖蹟桜ヶ丘駅前交差点",stationCd:"R265",lat:35.65051,lng:139.44547,q:15,r:3},
+  {station_name:"タイムズ聖蹟桜ヶ丘駅南口",stationCd:"DC98",lat:35.64886,lng:139.44754,q:16,r:2},
+  {station_name:"タイムズ聖蹟和田",stationCd:"OO83",lat:35.64751,lng:139.43606,q:12,r:5},
+  {station_name:"タイムズ多摩落合",stationCd:"R269",lat:35.62602,lng:139.42434,q:7,r:16},
+  {station_name:"タイムズ多摩諏訪",stationCd:"HU00",lat:35.63418,lng:139.45078,q:17,r:8},
+  {station_name:"タイムズ多摩諏訪２丁目",stationCd:"QP12",lat:35.62821,lng:139.44926,q:17,r:10},
+  {station_name:"タイムズ多摩関戸第４",stationCd:"V070",lat:35.64181,lng:139.45135,q:18,r:4},
+  {station_name:"タイムズ多摩関戸第５",stationCd:"T797",lat:35.65023,lng:139.44808,q:17,r:1},
+  {station_name:"タイムズ多摩関戸第７",stationCd:"MF85",lat:35.64993,lng:139.45197,q:18,r:1},
+  {station_name:"タイムズ多摩鶴牧第３",stationCd:"U501",lat:35.62359,lng:139.41787,q:4,r:19},
+  {station_name:"タイムズ多摩鶴牧第４",stationCd:"KH83",lat:35.62281,lng:139.41697,q:5,r:19},
+  {station_name:"タイムズプロムナード多摩",stationCd:"KH02",lat:35.61798,lng:139.42311,q:6,r:20},
+  {station_name:"多摩愛宕４丁目",stationCd:"NY60",lat:35.63000,lng:139.43038,q:9,r:14},
+  {station_name:"多摩一ノ宮",stationCd:"KG73",lat:35.65221,lng:139.44115,q:14,r:2},
+  {station_name:"多摩一ノ宮鈴木駐車場",stationCd:"KW37",lat:35.64977,lng:139.44504,q:17,r:2},
+  {station_name:"多摩落合１丁目",stationCd:"KU12",lat:35.62331,lng:139.43087,q:10,r:16},
+  {station_name:"フォンテーヌ雅",stationCd:"RI38",lat:35.62565,lng:139.41934,q:5,r:18},
+  {station_name:"タイムズ多摩乞田",stationCd:"IU60",lat:35.63212,lng:139.44126,q:14,r:10},
+  {station_name:"タイムズ多摩センター中央第１",stationCd:"DG00",lat:35.62174,lng:139.42417,q:7,r:18},
+  {station_name:"タイムズ多摩センター中央第３",stationCd:"R724",lat:35.62345,lng:139.42365,q:6,r:18},
+  {station_name:"タイムズ多摩センター東第１",stationCd:"S306",lat:35.62455,lng:139.42851,q:9,r:16},
+  {station_name:"多摩東寺方",stationCd:"II95",lat:35.64796,lng:139.44628,q:16,r:3},
+  {station_name:"豊ヶ丘１丁目第１",stationCd:"ME81",lat:35.62623,lng:139.43088,q:10,r:15},
+  {station_name:"タイムズ永山",stationCd:"OF51",lat:35.63330,lng:139.44610,q:15,r:9},
+  {station_name:"永山第６駐車場（小田急）",stationCd:"KH39",lat:35.63042,lng:139.44111,q:14,r:11},
+  {station_name:"馬場永山パーキング",stationCd:"QG86",lat:35.63405,lng:139.44810,q:18,r:8},
+  {station_name:"ＵＲ諏訪一丁目ハイツ",stationCd:"DA16",lat:35.63168,lng:139.45020,q:17,r:9},
+  {station_name:"ＵＲ多摩永山二丁目",stationCd:"Y755",lat:35.62515,lng:139.44953,q:17,r:12},
+  {station_name:"ＵＲ多摩永山二丁目第２",stationCd:"LK45",lat:35.62604,lng:139.44927,q:17,r:11},
+];
+
+// ダミーステータス（実装時はGASから取得）
+const STATUS_LIST = ['standby','standby','standby','checked','standby','7days_rule','stopped',
+  'standby','checked','standby','standby','standby','standby','checked','standby',
+  'standby','standby','standby','checked','standby','standby','standby','standby',
+  'standby','7days_rule','standby','standby','standby','standby','standby',
+  'checked','standby','standby','standby','standby','standby','standby',
+  'standby','standby','standby','standby','checked','standby'];
+
+const DUMMY_VEHICLES = {
+  'RB27': [{plate:'多摩503ワ1234',model:'ヤリス 1500',status:'standby'},{plate:'多摩502ワ5678',model:'アクア 1500',status:'standby'}],
+  'BH51': [{plate:'多摩503ワ9012',model:'ノート 1200e',status:'checked'}],
+  'default': [{plate:'多摩503ワ0000',model:'ヤリス 1500',status:'standby'}]
+};
+
+STATIONS.forEach((s, i) => { s.status = STATUS_LIST[i] || 'standby'; });
+
+// ===== ハニカム描画 =====
+const SIZE = 40; // セル外接円半径(px)
+const W = Math.sqrt(3) * SIZE;
+const H = 2 * SIZE;
+const PADDING = 20;
+
+// pointy-top hex: axial(q,r) → pixel(x,y)中心
+function hexToPixel(q, r) {
+  const x = W * (q + r/2);
+  const y = H * (3/4) * r;
+  return { x, y };
+}
+
+// グリッド全体のbbox計算
+let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+STATIONS.forEach(s => {
+  const {x, y} = hexToPixel(s.q, s.r);
+  s.px = x; s.py = y;
+  minX = Math.min(minX, x); minY = Math.min(minY, y);
+  maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+});
+
+const gridW = maxX - minX + W + PADDING*2;
+const gridH = maxY - minY + H + PADDING*2;
+const offX = -minX + PADDING + W/2;
+const offY = -minY + PADDING + H/2;
+
+const grid = document.getElementById('hexGrid');
+grid.style.width = gridW + 'px';
+grid.style.height = gridH + 'px';
+grid.style.minWidth = '100%';
+
+// pointy-top六角形のパスを生成
+function hexPath(cx, cy, size) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 180 * (60 * i - 30);
+    pts.push(`${cx + size * Math.cos(angle)},${cy + size * Math.sin(angle)}`);
+  }
+  return 'M' + pts.join('L') + 'Z';
+}
+
+function statusColor(status) {
+  switch(status) {
+    case 'standby': return 'var(--standby)';
+    case 'checked': return 'var(--checked)';
+    case '7days_rule': return 'var(--sevenday)';
+    case 'stopped': return 'var(--stopped-border)';
+    default: return 'var(--cell-empty-border)';
+  }
+}
+
+function statusFill(status) {
+  switch(status) {
+    case 'standby': return 'rgba(0,229,160,0.06)';
+    case 'checked': return 'rgba(255,77,141,0.06)';
+    case '7days_rule': return 'rgba(61,155,255,0.06)';
+    case 'stopped': return 'rgba(68,80,96,0.1)';
+    default: return 'transparent';
+  }
+}
+
+// ===== 空白セルを描画 =====
+// ステーションが占有するセルのセット
+const occupiedKeys = new Set(STATIONS.map(s => `${s.q},${s.r}`));
+
+// bboxのq/r範囲内で空白セルを列挙して描画
+const allQ = STATIONS.map(s => s.q);
+const allR = STATIONS.map(s => s.r);
+const qMin = Math.min(...allQ), qMax = Math.max(...allQ);
+const rMin = Math.min(...allR), rMax = Math.max(...allR);
+
+for (let r = rMin; r <= rMax; r++) {
+  for (let q = qMin; q <= qMax; q++) {
+    if (occupiedKeys.has(`${q},${r}`)) continue;
+    const {x, y} = hexToPixel(q, r);
+    const cx = x + offX;
+    const cy = y + offY;
+    // bboxの外側は除外（描画範囲を絞る）
+    if (cx < -W || cx > gridW + W || cy < -H || cy > gridH + H) continue;
+
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svgEl.setAttribute('width', W+4);
+    svgEl.setAttribute('height', H+4);
+    svgEl.style.cssText = `position:absolute;left:${cx - W/2 - 2}px;top:${cy - H/2 - 2}px;pointer-events:none;`;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d', hexPath(W/2+2, H/2+2, SIZE - 1));
+    path.setAttribute('fill', '#111d2a');
+    path.setAttribute('stroke', '#1e3045');
+    path.setAttribute('stroke-width', '0.8');
+    svgEl.appendChild(path);
+    grid.appendChild(svgEl);
+  }
+}
+
+// 各ステーションのセルを描画
+STATIONS.forEach(s => {
+  const cx = s.px + offX;
+  const cy = s.py + offY;
+  const color = statusColor(s.status);
+  const fill = statusFill(s.status);
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `hex-wrapper hex-${s.status}`;
+  wrapper.style.cssText = `position:absolute;left:${cx - W/2 - 2}px;top:${cy - H/2 - 2}px;width:${W+4}px;height:${H+4}px;`;
+
+  // SVG六角形
+  const svgEl = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svgEl.setAttribute('width', W+4);
+  svgEl.setAttribute('height', H+4);
+  svgEl.classList.add('hex-svg');
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d', hexPath(W/2+2, H/2+2, SIZE - 1));
+  path.setAttribute('fill', fill);
+  path.setAttribute('stroke', color);
+  path.setAttribute('stroke-width', s.status === 'standby' ? '1.5' : '1');
+  svgEl.appendChild(path);
+  wrapper.appendChild(svgEl);
+
+  // ラベル
+  const label = document.createElement('div');
+  label.className = 'hex-label';
+  label.style.cssText = `left:${cx - W/2}px;top:${cy - H/2 + 2}px;width:${W}px;height:${H - 4}px;`;
+  label.innerHTML = `<div class="hex-name" style="color:#e8f4ff;">${shortName(s.station_name)}</div>`;
+  grid.appendChild(label);
+
+  wrapper.addEventListener('click', () => openDetail(s));
+  grid.appendChild(wrapper);
+});
+
+function shortName(name) {
+  return name
+    .replace('タイムズ','T ')
+    .replace('駐車場','P')
+    .replace('第','#');
+}
+
+// カウント更新
+document.getElementById('cnt-standby').textContent =
+  STATIONS.filter(s => s.status === 'standby').length;
+document.getElementById('cnt-checked').textContent =
+  STATIONS.filter(s => s.status === 'checked').length;
+
+// ===== 現在地GPS =====
+let selfWrapper = null;   // 現在点滅中のセルwrapper
+let selfSvgEl = null;     // 現在地専用SVG（空白セル上に乗せる用）
+let watchId = null;
+
+const LAT_REF = Math.max(...STATIONS.map(s => s.lat)) + 0.001;
+const LNG_REF = Math.min(...STATIONS.map(s => s.lng)) - 0.001;
+const LAT_M = 111320;
+const LNG_M = 111320 * Math.cos(35.63 * Math.PI / 180);
+
+function axialRound(q, r) {
+  const s = -q - r;
+  let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+  const dq = Math.abs(rq-q), dr = Math.abs(rr-r), ds = Math.abs(rs-s);
+  if (dq > dr && dq > ds) rq = -rr - rs;
+  else if (dr > ds) rr = -rq - rs;
+  return [rq, rr];
+}
+
+function latLngToAxial(lat, lng) {
+  const xm = (lng - LNG_REF) * LNG_M;
+  const ym = (LAT_REF - lat) * LAT_M;
+  const q = (2/3 * xm) / SIZE;
+  const r = (-1/3 * xm + Math.sqrt(3)/3 * ym) / SIZE;
+  return axialRound(q, r);
+}
+
+function clearSelfCell() {
+  // ステーションセルの点滅解除
+  if (selfWrapper) {
+    selfWrapper.classList.remove('hex-self');
+    selfWrapper = null;
+  }
+  // 空白セル上の現在地SVGを削除
+  if (selfSvgEl) {
+    if (selfSvgEl._blink) clearInterval(selfSvgEl._blink);
+    selfSvgEl.remove();
+    selfSvgEl = null;
+  }
+}
+
+function setSelfCell(q, r) {
+  clearSelfCell();
+
+  // ステーションセルかどうか判定
+  const station = STATIONS.find(s => s.q === q && s.r === r);
+
+  if (station) {
+    // ステーションセル → wrapperにクラス付与して点滅
+    const wrappers = document.querySelectorAll('.hex-wrapper');
+    wrappers.forEach(w => {
+      const wx = parseFloat(w.style.left) + W/2 + 2;
+      const wy = parseFloat(w.style.top) + H/2 + 2;
+      const sx = station.px + offX;
+      const sy = station.py + offY;
+      if (Math.abs(wx - sx) < 2 && Math.abs(wy - sy) < 2) {
+        selfWrapper = w;
+        w.classList.add('hex-self');
+      }
+    });
+  } else {
+    // 空白セル → 現在地専用SVGを生成して重ねる
+    const {x, y} = hexToPixel(q, r);
+    const cx = x + offX;
+    const cy = y + offY;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', W+4);
+    svg.setAttribute('height', H+4);
+    svg.style.cssText = `position:absolute;left:${cx-W/2-2}px;top:${cy-H/2-2}px;pointer-events:none;z-index:10;`;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', hexPath(W/2+2, H/2+2, SIZE - 1));
+    path.setAttribute('fill', 'rgba(255,224,77,0.08)');
+    path.setAttribute('stroke', '#ffe04d');
+    path.setAttribute('stroke-width', '2');
+    svg.appendChild(path);
+    grid.appendChild(svg);
+    selfSvgEl = svg;
+
+    // 点滅アニメーション
+    let visible = true;
+    selfSvgEl._blink = setInterval(() => {
+      visible = !visible;
+      svg.style.opacity = visible ? '1' : '0.3';
+    }, 600);
+  }
+
+  // ミニマップの現在地ドットも更新
+  updateMinimapSelf(q, r);
+}
+
+function updateMinimapSelf(q, r) {
+  // ミニマップcanvasに現在地を黄色ドットで描画
+  // initMinimap後に呼ばれるため、再描画関数を外に出す
+  if (window._minimapRedraw) window._minimapRedraw(q, r);
+}
+
+function onGpsSuccess(pos) {
+  const lat = pos.coords.latitude;
+  const lng = pos.coords.longitude;
+  const [q, r] = latLngToAxial(lat, lng);
+  // q,rをSTATIONSのオフセット系に合わせる（min_q=0,min_r=0基準）
+  const minQ = Math.min(...STATIONS.map(s => s.q));
+  const minR = Math.min(...STATIONS.map(s => s.r));
+  setSelfCell(q - (/* ideal_min_q */ 0) + minQ, r + minR);
+}
+
+function onGpsError(err) {
+  console.warn('GPS取得失敗:', err.message);
+}
+
+function startGps() {
+  if (!navigator.geolocation) return;
+  // 初回即時取得
+  navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
+    enableHighAccuracy: true, timeout: 10000
+  });
+  // 以降30秒ごとに更新
+  watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
+    enableHighAccuracy: true, maximumAge: 30000
+  });
+}
+
+startGps();
+
+
+// ===== 詳細パネル =====
+let currentStation = null;
+
+function openDetail(station) {
+  currentStation = station;
+  document.getElementById('detailStation').textContent = station.station_name;
+  document.getElementById('detailCd').textContent = `ST: ${station.stationCd}`;
+
+  const vehicles = DUMMY_VEHICLES[station.stationCd] || DUMMY_VEHICLES['default'];
+  const container = document.getElementById('detailVehicles');
+  container.innerHTML = '';
+
+  vehicles.forEach(v => {
+    const card = document.createElement('div');
+    card.className = 'vehicle-card';
+    const statusCol = statusColor(v.status);
+    card.innerHTML = `
+      <div class="vehicle-status" style="background:${statusCol};opacity:0.7;"></div>
+      <div class="vehicle-info">
+        <div class="vehicle-plate">${v.plate}</div>
+        <div class="vehicle-model">${v.model}</div>
+      </div>
+      <div class="vehicle-actions">
+        <button class="btn-small btn-tire" onclick="alert('タイヤ点検アプリへ遷移')">点検</button>
+        <button class="btn-small btn-tma" onclick="alert('TMA起動')">TMA</button>
+        <button class="btn-small btn-check" onclick="alert('チェック')">✓</button>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  document.getElementById('detailPanel').classList.add('show');
+  document.getElementById('overlay').classList.add('show');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('show');
+  document.getElementById('overlay').classList.remove('show');
+}
+
+function openNav() {
+  if (!currentStation) return;
+  const url = `https://www.google.com/maps/dir/?api=1&destination=${currentStation.lat},${currentStation.lng}&travelmode=driving`;
+  window.open(url, '_blank');
+}
+
+// スクロール位置を聖蹟エリア（密集地）に初期フォーカス
+window.addEventListener('load', () => {
+  const targetStation = STATIONS.find(s => s.stationCd === 'R265');
+  if (targetStation) {
+    const cx = targetStation.px + offX;
+    const cy = targetStation.py + offY;
+    const main = document.querySelector('.main');
+    main.scrollLeft = cx - window.innerWidth/2;
+    main.scrollTop = cy - window.innerHeight/2;
+  }
+  initMinimap();
+});
+
+// ===== ミニマップ =====
+function initMinimap() {
+  const MINI_W = 120, MINI_H = 120;
+  const canvas = document.getElementById('minimapCanvas');
+  canvas.width = MINI_W;
+  canvas.height = MINI_H;
+  const ctx = canvas.getContext('2d');
+
+  // グリッド全体 → ミニマップのスケール
+  const scaleX = MINI_W / gridW;
+  const scaleY = MINI_H / gridH;
+  const scale = Math.min(scaleX, scaleY) * 0.95;
+  const padX = (MINI_W - gridW * scale) / 2;
+  const padY = (MINI_H - gridH * scale) / 2;
+
+  function drawMinimap() {
+    ctx.clearRect(0, 0, MINI_W, MINI_H);
+
+    // 空白セル（薄いグレー点）
+    for (let r = rMin; r <= rMax; r++) {
+      for (let q = qMin; q <= qMax; q++) {
+        if (occupiedKeys.has(`${q},${r}`)) continue;
+        const {x, y} = hexToPixel(q, r);
+        const mx = (x + offX) * scale + padX;
+        const my = (y + offY) * scale + padY;
+        ctx.beginPath();
+        ctx.arc(mx, my, 1.5, 0, Math.PI*2);
+        ctx.fillStyle = '#1e3045';
+        ctx.fill();
+      }
+    }
+
+    // ステーションセル（ステータス色の点）
+    STATIONS.forEach(s => {
+      const mx = (s.px + offX) * scale + padX;
+      const my = (s.py + offY) * scale + padY;
+      const r = Math.max(2.5, SIZE * scale * 0.6);
+      ctx.beginPath();
+      ctx.arc(mx, my, r, 0, Math.PI*2);
+      const colors = {
+        standby: '#00e5a0',
+        checked: '#ff4d8d',
+        '7days_rule': '#3d9bff',
+        stopped: '#2a3545',
+      };
+      ctx.fillStyle = colors[s.status] || '#2a3545';
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  drawMinimap();
+
+  let _selfQ = null, _selfR = null;
+
+  window._minimapRedraw = (q, r) => {
+    _selfQ = q; _selfR = r;
+    drawMinimap();
+    // 現在地を黄色ドットで上書き
+    const {x, y} = hexToPixel(q, r);
+    const mx = (x + offX) * scale + padX;
+    const my = (y + offY) * scale + padY;
+    ctx.beginPath();
+    ctx.arc(mx, my, 3.5, 0, Math.PI*2);
+    ctx.fillStyle = '#ffe04d';
+    ctx.globalAlpha = 1;
+    ctx.fill();
+  };
+
+  // ビューポート枠の更新
+  const viewport = document.getElementById('minimapViewport');
+  const main = document.querySelector('.main');
+
+  function updateViewport() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight - 52; // ヘッダー分引く
+
+    const left = main.scrollLeft * scale + padX;
+    const top = (main.scrollTop) * scale + padY;
+    const w = vw * scale;
+    const h = vh * scale;
+
+    viewport.style.left = Math.max(0, left) + 'px';
+    viewport.style.top = Math.max(0, top) + 'px';
+    viewport.style.width = Math.min(w, MINI_W) + 'px';
+    viewport.style.height = Math.min(h, MINI_H) + 'px';
+  }
+
+  main.addEventListener('scroll', updateViewport);
+  window.addEventListener('resize', updateViewport);
+  updateViewport();
+
+  // ミニマップクリックでジャンプ
+  document.getElementById('minimap').addEventListener('click', (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const gridX = (mx - padX) / scale;
+    const gridY = (my - padY) / scale;
+    main.scrollLeft = gridX - window.innerWidth / 2;
+    main.scrollTop = gridY - (window.innerHeight - 52) / 2;
+  });
+}
+</script>
+</body>
+</html>
