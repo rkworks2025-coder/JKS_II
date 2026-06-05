@@ -610,16 +610,6 @@ function renderGrid() {
     svgEl.appendChild(path);
     wrapper.appendChild(svgEl);
 
-    // 緊急予約マーカー（右上に小さい赤点）
-    if (s.hasUrgent) {
-      const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      dot.setAttribute('cx', W/2+2 + SIZE*0.55);
-      dot.setAttribute('cy', H/2+2 - SIZE*0.55);
-      dot.setAttribute('r', '5');
-      dot.setAttribute('fill', '#ff4d4d');
-      svgEl.appendChild(dot);
-    }
-
     const label = document.createElement('div');
     label.className = 'hex-label';
     label.style.cssText = `left:${cx-W/2}px;top:${cy-H/2+2}px;width:${W}px;height:${H-4}px;`;
