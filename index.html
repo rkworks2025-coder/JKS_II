@@ -308,7 +308,7 @@
   }
 
   .vehicle-model {
-    font-size: 10px;
+    font-size: 12px;
     color: var(--text-dim);
     margin-top: 2px;
   }
@@ -804,8 +804,8 @@ function renderVehicleCards(container, vehicles, station) {
       <div class="vehicle-status" style="background:${statusColor(v.status)};opacity:0.8;flex-shrink:0;"></div>
       <div class="vehicle-info" style="flex:1;min-width:0;">
         <div class="vehicle-plate">${v.plate}</div>
-        <div class="vehicle-model">${v.model} ／ <span style="color:${statusColor(v.status)};font-size:10px;">${v.status}</span></div>
-        ${v.lastChecked ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px;">前回: ${v.lastChecked}</div>` : ''}
+        <div class="vehicle-model">${v.model} ／ <span style="color:${statusColor(v.status)};font-size:12px;">${v.status}</span></div>
+        ${v.lastChecked ? `<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">前回: ${v.lastChecked}</div>` : ''}
       </div>
       <div class="vehicle-actions">
         <button class="btn-small btn-tire" onclick="goTireApp('${v.plate}','${station.station_name}','${v.model}')">点検</button>
