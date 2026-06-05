@@ -872,13 +872,14 @@ const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_r
 
 // ===== 点検ボタン → タイヤ点検アプリへ遷移 =====
 function goTireApp(plate, stationName, model) {
-  const JUNKAI_APP_URL = 'https://rkworks2025-coder.github.io/-/';
+  const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html?city=tama';
   const params = new URLSearchParams({
     station:    stationName,
     model:      model,
-    plate_full: plate,
-    return_to:  JUNKAI_APP_URL  // 送信完了後の戻り先
+    plate_full: plate
   });
+  // スワイプバックでarea.htmlに戻れるよう履歴を書き換え
+  history.replaceState(null, '', JUNKAI_AREA_URL);
   location.href = `${TIRE_APP_URL}?${params.toString()}`;
 }
 
