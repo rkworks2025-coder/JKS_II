@@ -747,12 +747,14 @@ function onGpsError(err) {
 }
 
 function startGps() {
+  // ===== デバッグ用ダミー座標（確認後に削除） =====
+  // 聖蹟桜ヶ丘駅前交差点付近
+  onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
+  // =============================================
   if (!navigator.geolocation) return;
-  // 初回即時取得
   navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
     enableHighAccuracy: true, timeout: 10000
   });
-  // 以降30秒ごとに更新
   watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
     enableHighAccuracy: true, maximumAge: 30000
   });
