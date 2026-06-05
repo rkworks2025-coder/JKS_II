@@ -728,10 +728,6 @@ function onGpsError(err) {
 }
 
 function startGps() {
-  // ===== デバッグ用ダミー座標（確認後に削除） =====
-  onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
-  return; // デバッグ中はGPS取得をスキップ
-  // =============================================
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
     enableHighAccuracy: true, timeout: 10000
