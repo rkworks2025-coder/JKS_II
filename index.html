@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>JKS-II｜多摩市</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
@@ -107,9 +110,16 @@
     position: fixed;
     top: var(--header-h);
     left: 0; right: 0; bottom: 0;
-    overflow-x: auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+  /* グリッドラッパー（transformで移動・拡縮） */
+  .grid-transform {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
   }
 
   /* ハニカムグリッドコンテナ */
@@ -347,8 +357,10 @@
   </div>
 </header>
 
-<div class="main">
-  <div class="hex-grid" id="hexGrid"></div>
+<div class="main" id="mainArea">
+  <div class="grid-transform" id="gridTransform">
+    <div class="hex-grid" id="hexGrid"></div>
+  </div>
 </div>
 
 
@@ -453,6 +465,7 @@ async function fetchMapData() {
     renderGrid();
     updateCounts();
     initMinimap();
+    initPanZoom();
     startGps();
 
   } catch(err) {
@@ -462,6 +475,7 @@ async function fetchMapData() {
     renderGrid();
     updateCounts();
     initMinimap();
+    initPanZoom();
     startGps();
   } finally {
     showLoading(false);
@@ -865,7 +879,6 @@ function initMinimap() {
   window._minimapRedraw = (q, r) => {
     _selfQ = q; _selfR = r;
     drawMinimap();
-    // 現在地を黄色ドットで上書き
     const {x, y} = hexToPixel(q, r);
     const mx = (x + offX) * scale + padX;
     const my = (y + offY) * scale + padY;
@@ -876,28 +889,24 @@ function initMinimap() {
     ctx.fill();
   };
 
-  // ビューポート枠の更新
+  // ビューポート枠の更新（transformベース）
   const viewport = document.getElementById('minimapViewport');
-  const main = document.querySelector('.main');
 
-  function updateViewport() {
+  window._updateMinimapViewport = () => {
     const vw = window.innerWidth;
-    const vh = window.innerHeight - 52; // ヘッダー分引く
+    const vh = window.innerHeight - 52;
+    // 現在のtransform状態から表示領域を計算
+    const visLeft   = (-panX / curScale) * scale + padX;
+    const visTop    = (-panY / curScale) * scale + padY;
+    const visW      = (vw / curScale) * scale;
+    const visH      = (vh / curScale) * scale;
+    viewport.style.left   = Math.max(0, visLeft) + 'px';
+    viewport.style.top    = Math.max(0, visTop)  + 'px';
+    viewport.style.width  = Math.min(visW, MINI_W) + 'px';
+    viewport.style.height = Math.min(visH, MINI_H) + 'px';
+  };
 
-    const left = main.scrollLeft * scale + padX;
-    const top = (main.scrollTop) * scale + padY;
-    const w = vw * scale;
-    const h = vh * scale;
-
-    viewport.style.left = Math.max(0, left) + 'px';
-    viewport.style.top = Math.max(0, top) + 'px';
-    viewport.style.width = Math.min(w, MINI_W) + 'px';
-    viewport.style.height = Math.min(h, MINI_H) + 'px';
-  }
-
-  main.addEventListener('scroll', updateViewport);
-  window.addEventListener('resize', updateViewport);
-  updateViewport();
+  window.addEventListener('resize', window._updateMinimapViewport);
 
   // ミニマップクリックでジャンプ
   document.getElementById('minimap').addEventListener('click', (e) => {
@@ -906,19 +915,157 @@ function initMinimap() {
     const my = e.clientY - rect.top;
     const gridX = (mx - padX) / scale;
     const gridY = (my - padY) / scale;
-    main.scrollLeft = gridX - window.innerWidth / 2;
-    main.scrollTop = gridY - (window.innerHeight - 52) / 2;
+    panX = -(gridX * curScale) + window.innerWidth  / 2;
+    panY = -(gridY * curScale) + (window.innerHeight - 52) / 2;
+    applyTransform();
   });
+}
 
-  // 初期スクロール: 聖蹟桜ヶ丘エリアにフォーカス
-  const targetStation = STATIONS.find(s => s.stationCd === 'R265');
-  if (targetStation) {
-    const cx = targetStation.px + offX;
-    const cy = targetStation.py + offY;
-    main.scrollLeft = cx - window.innerWidth / 2;
-    main.scrollTop  = cy - (window.innerHeight - 52) / 2;
+// ===== ピンチズーム・パン =====
+const mainArea    = document.getElementById('mainArea');
+const gridTransform = document.getElementById('gridTransform');
+
+let curScale = 1;
+let panX = 0, panY = 0;
+let isPinching = false;
+let lastDist = 0;
+let lastMidX = 0, lastMidY = 0;
+let isDragging = false;
+let dragStartX = 0, dragStartY = 0;
+let dragPanX = 0, dragPanY = 0;
+
+function applyTransform() {
+  gridTransform.style.transform = `translate(${panX}px,${panY}px) scale(${curScale})`;
+  if (window._updateMinimapViewport) window._updateMinimapViewport();
+}
+
+function clampPan() {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight - 52;
+  const scaledW = gridW * curScale;
+  const scaledH = gridH * curScale;
+  // グリッドが画面より小さい場合は中央揃え、大きい場合ははみ出し防止
+  if (scaledW <= vw) {
+    panX = (vw - scaledW) / 2;
+  } else {
+    panX = Math.min(0, Math.max(vw - scaledW, panX));
+  }
+  if (scaledH <= vh) {
+    panY = (vh - scaledH) / 2;
+  } else {
+    panY = Math.min(0, Math.max(vh - scaledH, panY));
   }
 }
+
+function initPanZoom() {
+  // 初期スケール: グリッド全体が画面に収まるスケール
+  const vw = window.innerWidth;
+  const vh = window.innerHeight - 52;
+  const scaleX = vw / gridW;
+  const scaleY = vh / gridH;
+  curScale = Math.min(scaleX, scaleY) * 0.92;
+  // 初期位置: 聖蹟エリアを中心に
+  const target = STATIONS.find(s => s.stationCd === 'R265');
+  if (target) {
+    panX = vw / 2 - (target.px + offX) * curScale;
+    panY = vh / 2 - (target.py + offY) * curScale;
+  }
+  clampPan();
+  applyTransform();
+}
+
+// タッチイベント
+mainArea.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    isPinching = true;
+    isDragging = false;
+    const dx = e.touches[1].clientX - e.touches[0].clientX;
+    const dy = e.touches[1].clientY - e.touches[0].clientY;
+    lastDist = Math.hypot(dx, dy);
+    lastMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    lastMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - 52;
+  } else if (e.touches.length === 1) {
+    isDragging = true;
+    isPinching = false;
+    dragStartX = e.touches[0].clientX;
+    dragStartY = e.touches[0].clientY;
+    dragPanX = panX;
+    dragPanY = panY;
+  }
+}, { passive: true });
+
+mainArea.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (isPinching && e.touches.length === 2) {
+    const dx = e.touches[1].clientX - e.touches[0].clientX;
+    const dy = e.touches[1].clientY - e.touches[0].clientY;
+    const dist = Math.hypot(dx, dy);
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - 52;
+
+    const zoomFactor = dist / lastDist;
+    const newScale = Math.min(3, Math.max(0.3, curScale * zoomFactor));
+
+    // ズームの中心点を維持
+    panX = midX - (midX - panX) * (newScale / curScale);
+    panY = midY - (midY - panY) * (newScale / curScale);
+    curScale = newScale;
+
+    // パン移動
+    panX += midX - lastMidX;
+    panY += midY - lastMidY;
+
+    lastDist = dist;
+    lastMidX = midX;
+    lastMidY = midY;
+
+    clampPan();
+    applyTransform();
+  } else if (isDragging && e.touches.length === 1) {
+    panX = dragPanX + (e.touches[0].clientX - dragStartX);
+    panY = dragPanY + (e.touches[0].clientY - dragStartY);
+    clampPan();
+    applyTransform();
+  }
+}, { passive: false });
+
+mainArea.addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) isPinching = false;
+  if (e.touches.length === 0) isDragging = false;
+}, { passive: true });
+
+// マウスイベント（PC用）
+mainArea.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragPanX = panX;
+  dragPanY = panY;
+  mainArea.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+  panX = dragPanX + (e.clientX - dragStartX);
+  panY = dragPanY + (e.clientY - dragStartY);
+  clampPan();
+  applyTransform();
+});
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  mainArea.style.cursor = '';
+});
+mainArea.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const newScale = Math.min(3, Math.max(0.3, curScale * factor));
+  const mx = e.clientX;
+  const my = e.clientY - 52;
+  panX = mx - (mx - panX) * (newScale / curScale);
+  panY = my - (my - panY) * (newScale / curScale);
+  curScale = newScale;
+  clampPan();
+  applyTransform();
+}, { passive: false });
 
 // ===== 起動 =====
 window.addEventListener('load', () => {
