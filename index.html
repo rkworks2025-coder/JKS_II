@@ -747,35 +747,144 @@ function openDetail(station) {
   document.getElementById('detailStation').textContent = station.station_name;
   document.getElementById('detailCd').textContent = `ST: ${station.stationCd} ／ ${station.total || 0}台`;
 
-  // GASデータから車両情報を取得（inspectionlogベース）
-  const gas = gasStationMap.get(station.stationCd);
   const container = document.getElementById('detailVehicles');
-  container.innerHTML = '';
-
-  if (!gas) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px;">データなし</div>';
-  } else {
-    // ステーション統計サマリー
-    const summary = document.createElement('div');
-    summary.style.cssText = 'font-size:11px;color:var(--text-dim);margin-bottom:10px;';
-    summary.textContent = `standby: ${gas.standby}  checked: ${gas.checked}  stopped: ${gas.stopped}`;
-    container.appendChild(summary);
-
-    // 車両カード（実データ接続後は各車両を個別表示予定、現在はステーション集計表示）
-    const card = document.createElement('div');
-    card.className = 'vehicle-card';
-    card.innerHTML = `
-      <div class="vehicle-status" style="background:${statusColor(station.status)};opacity:0.7;"></div>
-      <div class="vehicle-info">
-        <div class="vehicle-plate">${station.station_name}</div>
-        <div class="vehicle-model">合計 ${gas.total}台 ／ 巡回待ち ${gas.standby}台</div>
-      </div>
-    `;
-    container.appendChild(card);
-  }
+  container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px;text-align:center;">読み込み中...</div>';
 
   document.getElementById('detailPanel').classList.add('show');
   document.getElementById('overlay').classList.add('show');
+
+  // GASからステーション詳細を取得
+  fetch(`${GAS_URL}?action=getStationDetail&station=${encodeURIComponent(station.station_name)}&area=${AREA_KEY}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.result !== 'OK') throw new Error(data.error || 'GASエラー');
+      renderVehicleCards(container, data.vehicles, station);
+    })
+    .catch(err => {
+      container.innerHTML = `<div style="color:#ff4d4d;font-size:12px;padding:8px;">取得失敗: ${err.message}</div>`;
+    });
+}
+
+function renderVehicleCards(container, vehicles, station) {
+  container.innerHTML = '';
+
+  if (!vehicles || vehicles.length === 0) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px;">車両データなし</div>';
+    return;
+  }
+
+  vehicles.forEach(v => {
+    const card = document.createElement('div');
+    card.className = 'vehicle-card';
+    card.style.flexDirection = 'column';
+    card.style.gap = '8px';
+
+    // 上段: ステータスバー + 車両情報 + ボタン群
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;gap:10px;width:100%;';
+    topRow.innerHTML = `
+      <div class="vehicle-status" style="background:${statusColor(v.status)};opacity:0.8;flex-shrink:0;"></div>
+      <div class="vehicle-info" style="flex:1;min-width:0;">
+        <div class="vehicle-plate">${v.plate}</div>
+        <div class="vehicle-model">${v.model} ／ <span style="color:${statusColor(v.status)};font-size:10px;">${v.status}</span></div>
+        ${v.lastChecked ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px;">前回: ${v.lastChecked}</div>` : ''}
+      </div>
+      <div class="vehicle-actions">
+        <button class="btn-small btn-tire" onclick="goTireApp('${v.plate}','${station.stationCd}','${station.station_name}','${v.model}')">点検</button>
+        <button class="btn-small btn-tma"  onclick="goTmaAction('${v.plate}','${station.stationCd}','${v.model}')">TMA</button>
+        <button class="btn-small btn-check" onclick="doCheck('${v.plate}','${station.station_name}')">✓</button>
+      </div>
+    `;
+    card.appendChild(topRow);
+
+    // 下段: 予約タイムライン
+    if (v.timeline) {
+      const tlRow = document.createElement('div');
+      tlRow.style.cssText = 'width:100%;padding-top:4px;border-top:1px solid #1a2d40;';
+      tlRow.appendChild(buildTimeline(v.timeline));
+      card.appendChild(tlRow);
+    }
+
+    container.appendChild(card);
+  });
+}
+
+function buildTimeline(timeline) {
+  // 24時間分（96スロット）を表示
+  const slots = timeline.slice(0, 96);
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'display:flex;flex-wrap:wrap;gap:1px;';
+
+  for (let i = 0; i < slots.length; i++) {
+    const ch = slots[i];
+    const dot = document.createElement('div');
+    dot.style.cssText = `width:5px;height:10px;border-radius:1px;background:${
+      ch === '○' ? '#00e5a0' :
+      ch === 's' || ch === 'x' ? '#ff4d4d' :
+      '#1a2d40'
+    };`;
+    // 6スロット（1.5時間）ごとに区切り
+    if (i > 0 && i % 6 === 0) {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'width:2px;height:10px;background:transparent;';
+      wrapper.appendChild(sep);
+    }
+    wrapper.appendChild(dot);
+  }
+
+  // ラベル（現在・6h・12h・18h・24h）
+  const label = document.createElement('div');
+  label.style.cssText = 'display:flex;justify-content:space-between;margin-top:2px;font-size:8px;color:var(--text-dim);';
+  label.innerHTML = '<span>今</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span>';
+
+  const container = document.createElement('div');
+  container.appendChild(wrapper);
+  container.appendChild(label);
+  return container;
+}
+
+// 点検ボタン → タイヤ点検アプリへ遷移
+function goTireApp(plate, stationCd, stationName, model) {
+  const TIRE_APP_URL = 'https://rkworks2025-coder.github.io/r.k.w-/';
+  const params = new URLSearchParams({ plate, station: stationCd, station_name: stationName, model });
+  location.href = `${TIRE_APP_URL}?${params.toString()}`;
+}
+
+// TMAボタン → 作業管理アプリへ遷移
+function goTmaAction(plate, stationCd, model) {
+  const WORK_APP_URL = 'https://rkworks2025-coder.github.io/work/'; // 要確認
+  const requestId = 'req-' + Date.now() + '-' + Math.random().toString(36).slice(-4);
+  const params = new URLSearchParams({ plate_full: plate, station: stationCd, model, tma_plate: plate, tma_req_id: requestId });
+  location.href = `${WORK_APP_URL}?${params.toString()}`;
+}
+
+// チェックボタン → inspectionlogのstatusをcheckedに更新
+function doCheck(plate, stationName) {
+  // 確認モーダル（後でカスタムモーダルに差し替え）
+  if (!confirm(`${plate} をcheckedにしますか？`)) return;
+
+  const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_rqm6mk-Os3XBH6C731aGxk7ecJC5U3XjtwfMkeF429rezkAo79jN/exec';
+  const body = new URLSearchParams();
+  body.set('action', 'syncInspection');
+  body.set('plate', plate);
+  body.set('station', stationName);
+  body.set('checked', 'true');
+
+  fetch(JUNKAI_GAS_URL, { method: 'POST', body, keepalive: true })
+    .then(r => r.json())
+    .then(() => {
+      // ステータスを即座にUIに反映
+      const s = STATIONS.find(st => st.station_name === stationName);
+      if (s) {
+        s.standby = Math.max(0, (s.standby || 1) - 1);
+        s.checked = (s.checked || 0) + 1;
+        if (s.standby === 0) s.status = 'checked';
+        renderGrid();
+        updateCounts();
+      }
+      closeDetail();
+    })
+    .catch(() => alert('送信失敗。再度お試しください。'));
 }
 
 function closeDetail() {
