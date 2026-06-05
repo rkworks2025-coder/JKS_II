@@ -351,6 +351,30 @@
     letter-spacing: 0.08em;
   }
 
+  .area-tabs {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+  }
+
+  .area-tab {
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: 'Noto Sans JP', sans-serif;
+    border: 1px solid #2a3d52;
+    color: var(--text-dim);
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .area-tab.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(0,229,160,0.08);
+  }
+
   .update-btn {
     margin-left: 12px;
     padding: 4px 10px;
@@ -381,6 +405,10 @@
 
 <header>
   <div class="header-title">JKS-II</div>
+  <div class="area-tabs">
+    <button class="area-tab active" data-area="tama" onclick="switchArea('tama')">多摩</button>
+    <button class="area-tab" data-area="fuchu" onclick="switchArea('fuchu')">府中</button>
+  </div>
   <div class="header-area">多摩市</div>
   <div class="header-stats">
     <div class="stat-item">standby <span id="cnt-standby">—</span></div>
@@ -419,7 +447,7 @@
 
 <script>
 // ===== 座標→ハニカム変換済みステーションデータ =====
-const STATIONS = [
+const STATIONS_TAMA = [
   {station_name:"パトリア桜ヶ丘",stationCd:"RB27",lat:35.65285,lng:139.44469,q:15,r:1},
   {station_name:"ＵＲプラザ永山",stationCd:"BH51",lat:35.63182,lng:139.44723,q:16,r:9},
   {station_name:"ＡＯＫＩ聖蹟桜ヶ丘店",stationCd:"QG74",lat:35.65185,lng:139.43947,q:13,r:2},
@@ -465,17 +493,95 @@ const STATIONS = [
   {station_name:"ＵＲ多摩永山二丁目第２",stationCd:"LK45",lat:35.62604,lng:139.44927,q:17,r:11},
 ];
 
-// GASから取得したデータをstationCdをキーにして保持
-let gasStationMap = new Map(); // stationCd → { status, total, standby, checked, ... }
+const STATIONS_FUCHU = [
+  {station_name:"エリオ駐車場",stationCd:"KB50",lat:35.674979,lng:139.483962,q:6,r:6},
+  {station_name:"タイムズ北府中",stationCd:"BP54",lat:35.682679,lng:139.471187,q:0,r:6},
+  {station_name:"タイムズ多摩川競艇場前",stationCd:"BX03",lat:35.658916,lng:139.499385,q:12,r:10},
+  {station_name:"タイムズ大國魂神社",stationCd:"BJ56",lat:35.669808,lng:139.479747,q:4,r:9},
+  {station_name:"タイムズ大國魂神社（ＥＶ）",stationCd:"RJ77",lat:35.669808,lng:139.479747,q:4,r:10},
+  {station_name:"タイムズ府中宮町第４",stationCd:"Q486",lat:35.669884,lng:139.482495,q:5,r:9},
+  {station_name:"タイムズ府中宮町第６",stationCd:"U074",lat:35.670128,lng:139.480657,q:4,r:8},
+  {station_name:"タイムズ府中宮西町第３",stationCd:"KV42",lat:35.670739,lng:139.475488,q:2,r:10},
+  {station_name:"タイムズ府中寿町第２",stationCd:"U641",lat:35.674918,lng:139.475320,q:2,r:8},
+  {station_name:"タイムズ府中小柳町第２",stationCd:"OK22",lat:35.664278,lng:139.502608,q:13,r:7},
+  {station_name:"タイムズ府中小柳町第３",stationCd:"QA10",lat:35.662024,lng:139.502427,q:13,r:8},
+  {station_name:"タイムズ府中新町１丁目",stationCd:"QB10",lat:35.687322,lng:139.487356,q:7,r:0},
+  {station_name:"タイムズ府中栄町",stationCd:"BA69",lat:35.689633,lng:139.479922,q:4,r:1},
+  {station_name:"タイムズ府中栄町第３",stationCd:"IU62",lat:35.688779,lng:139.479370,q:5,r:1},
+  {station_name:"タイムズ府中町第３",stationCd:"T864",lat:35.674777,lng:139.481244,q:4,r:7},
+  {station_name:"タイムズ府中緑町第３",stationCd:"EL20",lat:35.672004,lng:139.484468,q:6,r:7},
+  {station_name:"タイムズ府中緑町第４",stationCd:"MJ91",lat:35.671460,lng:139.486792,q:7,r:7},
+  {station_name:"タイムズ府中若松町第２",stationCd:"KE79",lat:35.673812,lng:139.498579,q:11,r:4},
+  {station_name:"タイムズ府中ＦＲＣ",stationCd:"EJ52",lat:35.670787,lng:139.477875,q:3,r:9},
+  {station_name:"タイムズ東京競馬場横",stationCd:"Y343",lat:35.662479,lng:139.491297,q:9,r:10},
+  {station_name:"タイムズ東京競馬場横第２",stationCd:"RN89",lat:35.661728,lng:139.491862,q:10,r:10},
+  {station_name:"タイムズ東府中駅前",stationCd:"BE95",lat:35.669504,lng:139.496397,q:11,r:6},
+  {station_name:"フォトレ府中",stationCd:"DP94",lat:35.672102,lng:139.475670,q:2,r:9},
+  {station_name:"マイプレイス東府中",stationCd:"IR04",lat:35.668110,lng:139.496191,q:10,r:7},
+  {station_name:"メルベーユ多磨霊園",stationCd:"LJ16",lat:35.665129,lng:139.505486,q:14,r:6},
+  {station_name:"ユーコート府中",stationCd:"CN26",lat:35.672585,lng:139.482908,q:5,r:7},
+  {station_name:"レジデンス若松一番館",stationCd:"KU17",lat:35.672820,lng:139.501841,q:13,r:3},
+  {station_name:"ヴェルト府中",stationCd:"QV05",lat:35.672478,lng:139.483006,q:5,r:8},
+  {station_name:"北府中駅前",stationCd:"OL69",lat:35.678863,lng:139.473652,q:1,r:7},
+  {station_name:"天神町１丁目",stationCd:"NH42",lat:35.678210,lng:139.488135,q:7,r:4},
+  {station_name:"天神町２丁目",stationCd:"QE33",lat:35.681208,lng:139.491883,q:9,r:2},
+  {station_name:"天神町４丁目",stationCd:"OC70",lat:35.681550,lng:139.492950,q:10,r:2},
+  {station_name:"府中八幡町２丁目",stationCd:"BW45",lat:35.670268,lng:139.487017,q:8,r:7},
+  {station_name:"府中大久保駐車場",stationCd:"BS67",lat:35.674966,lng:139.483232,q:5,r:6},
+  {station_name:"府中幸町１丁目",stationCd:"OT24",lat:35.678407,lng:139.481923,q:5,r:5},
+  {station_name:"府中是政６丁目",stationCd:"MT68",lat:35.655486,lng:139.483026,q:5,r:15},
+  {station_name:"府中栄町第４",stationCd:"QE32",lat:35.690177,lng:139.479696,q:4,r:0},
+  {station_name:"府中浅間町２丁目",stationCd:"QZ63",lat:35.683984,lng:139.497154,q:11,r:0},
+  {station_name:"府中町２丁目駐車場",stationCd:"DX27",lat:35.673969,lng:139.484253,q:7,r:6},
+  {station_name:"府中緑町１丁目",stationCd:"DB87",lat:35.671030,lng:139.486794,q:7,r:8},
+  {station_name:"府中緑町２丁目第２",stationCd:"MH17",lat:35.672586,lng:139.490149,q:8,r:6},
+  {station_name:"府中緑町２丁目第３",stationCd:"OG99",lat:35.671273,lng:139.487823,q:6,r:8},
+  {station_name:"府中若松町１丁目第２",stationCd:"MR39",lat:35.669958,lng:139.501518,q:12,r:5},
+  {station_name:"府中若松町２丁目",stationCd:"LR95",lat:35.672551,lng:139.496466,q:10,r:5},
+  {station_name:"東府中マンション",stationCd:"KR74",lat:35.669518,lng:139.496391,q:12,r:6},
+  {station_name:"清水が丘１丁目",stationCd:"QZ05",lat:35.666925,lng:139.493610,q:9,r:8},
+  {station_name:"ＭＡＸＩＶ東府中",stationCd:"LV90",lat:35.671863,lng:139.497634,q:11,r:5},
+  {station_name:"Ｔ'ｓ ｇａｒｄｅｎ府中",stationCd:"EA57",lat:35.678233,lng:139.486989,q:8,r:4},
+  {station_name:"ＵＲ府中グリーンハイツ",stationCd:"V216",lat:35.678543,lng:139.477863,q:3,r:6},
+];
 
-// GASからマップデータを取得してステータスをSTATIONSに反映
+// 現在のエリア
+let CURRENT_AREA = 'tama';
+let STATIONS = STATIONS_TAMA.map(s => ({...s}));
+
+// GASから取得したデータをstationCdをキーにして保持
+let gasStationMap = new Map();
+
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbywQoNFA2x7qn8cMelt_5OVPiNumBYqPbTNnK3nzXWv59q0FmP2Mt8qmVxT5Zk6wPEr/exec';
-const AREA_KEY = 'tama';
+// AREA_KEYはCURRENT_AREAを参照
+const AREA_KEY = () => CURRENT_AREA;
+
+// ===== エリア切り替え =====
+async function switchArea(areaKey) {
+  if (CURRENT_AREA === areaKey) return;
+  CURRENT_AREA = areaKey;
+
+  // STATIONSを差し替え
+  STATIONS.length = 0;
+  const src = areaKey === 'fuchu' ? STATIONS_FUCHU : STATIONS_TAMA;
+  src.forEach(s => STATIONS.push({...s}));
+
+  // ヘッダー表示更新
+  document.querySelector('.header-area').textContent = areaKey === 'fuchu' ? '府中市' : '多摩市';
+  document.querySelectorAll('.area-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.area === areaKey);
+  });
+
+  // グリッドを再描画してデータ再取得
+  grid._emptyDrawn = false;
+  gasStationMap = new Map();
+  await fetchMapData();
+}
 
 async function fetchMapData() {
   showLoading(true);
   try {
-    const res = await fetch(`${GAS_URL}?action=getMapData&area=${AREA_KEY}`);
+    const res = await fetch(`${GAS_URL}?action=getMapData&area=${AREA_KEY()}`);
     const data = await res.json();
     if (data.result !== 'OK') throw new Error(data.error || 'GASエラー');
 
@@ -792,7 +898,7 @@ function openDetail(station) {
   document.getElementById('overlay').classList.add('show');
 
   // GASからステーション詳細を取得
-  fetch(`${GAS_URL}?action=getStationDetail&station=${encodeURIComponent(station.station_name)}&area=${AREA_KEY}`)
+  fetch(`${GAS_URL}?action=getStationDetail&station=${encodeURIComponent(station.station_name)}&area=${AREA_KEY()}`)
     .then(r => r.json())
     .then(data => {
       if (data.result !== 'OK') throw new Error(data.error || 'GASエラー');
@@ -908,7 +1014,7 @@ function triggerUpdate() {
     method: 'POST',
     body: JSON.stringify({
       action: 'update',
-      area: AREA_KEY,
+      area: AREA_KEY(),
       requestId
     }),
     keepalive: true
@@ -937,7 +1043,7 @@ function triggerUpdate() {
   });
 }
 function goTireApp(plate, stationName, model) {
-  const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html?city=tama';
+  const JUNKAI_AREA_URL = `https://rkworks2025-coder.github.io/-/area.html?city=${CURRENT_AREA}`;
 
   // 巡回アプリ側に「この車両の点検ボタンを自動クリックして」という指示をlocalStorageで渡す
   try {
