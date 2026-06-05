@@ -643,6 +643,7 @@ const LAT_REF = Math.max(...STATIONS.map(s => s.lat)) + 0.001;
 const LNG_REF = Math.min(...STATIONS.map(s => s.lng)) - 0.001;
 const LAT_M = 111320;
 const LNG_M = 111320 * Math.cos(35.63 * Math.PI / 180);
+const CELL_M = 150; // ハニカムセルの実際のサイズ（メートル）
 
 function axialRound(q, r) {
   const s = -q - r;
@@ -654,12 +655,24 @@ function axialRound(q, r) {
 }
 
 function latLngToAxial(lat, lng) {
+  // 緯度経度→メートル変換してからaxial座標に変換
   const xm = (lng - LNG_REF) * LNG_M;
   const ym = (LAT_REF - lat) * LAT_M;
-  const q = (2/3 * xm) / SIZE;
-  const r = (-1/3 * xm + Math.sqrt(3)/3 * ym) / SIZE;
+  // pointy-top hex: size=CELL_M(メートル)
+  const q = (2/3 * xm) / CELL_M;
+  const r = (-1/3 * xm + Math.sqrt(3)/3 * ym) / CELL_M;
   return axialRound(q, r);
 }
+
+// STATIONSのaxial座標の最小値（オフセット基準）
+const AXIAL_MIN_Q = Math.min(...STATIONS.map(s => {
+  const [q] = latLngToAxial(s.lat, s.lng);
+  return q;
+}));
+const AXIAL_MIN_R = Math.min(...STATIONS.map(s => {
+  const [, r] = latLngToAxial(s.lat, s.lng);
+  return r;
+}));
 
 function clearSelfCell() {
   // ステーションセルの点滅解除
@@ -735,11 +748,11 @@ function updateMinimapSelf(q, r) {
 function onGpsSuccess(pos) {
   const lat = pos.coords.latitude;
   const lng = pos.coords.longitude;
-  const [q, r] = latLngToAxial(lat, lng);
-  // q,rをSTATIONSのオフセット系に合わせる（min_q=0,min_r=0基準）
-  const minQ = Math.min(...STATIONS.map(s => s.q));
-  const minR = Math.min(...STATIONS.map(s => s.r));
-  setSelfCell(q - (/* ideal_min_q */ 0) + minQ, r + minR);
+  const [rawQ, rawR] = latLngToAxial(lat, lng);
+  // STATIONSのq,r座標系に合わせてオフセット補正
+  const q = rawQ - AXIAL_MIN_Q;
+  const r = rawR - AXIAL_MIN_R;
+  setSelfCell(q, r);
 }
 
 function onGpsError(err) {
