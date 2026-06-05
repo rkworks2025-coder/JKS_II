@@ -351,9 +351,25 @@
     letter-spacing: 0.08em;
   }
 
-  .overlay {
-    position: fixed;
-    inset: 0;
+  .update-btn {
+    margin-left: 12px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .update-btn:disabled {
+    border-color: var(--text-dim);
+    color: var(--text-dim);
+    cursor: default;
+  }
     background: rgba(0,0,0,0.4);
     z-index: 140;
     display: none;
@@ -370,6 +386,7 @@
     <div class="stat-item">standby <span id="cnt-standby">—</span></div>
     <div class="stat-item">checked <span id="cnt-checked">—</span></div>
   </div>
+  <button id="updateBtn" class="update-btn" onclick="triggerUpdate()">更新</button>
 </header>
 
 <div class="main" id="mainArea">
@@ -879,7 +896,46 @@ const TIRE_APP_URL = 'https://rkworks2025-coder.github.io/TireCheck/';
 const WORK_APP_URL = 'https://rkworks2025-coder.github.io/work/';
 const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_rqm6mk-Os3XBH6C731aGxk7ecJC5U3XjtwfMkeF429rezkAo79jN/exec';
 
-// ===== 点検ボタン → 巡回アプリを別ウィンドウで開いて該当車両の点検ボタンを自動クリック =====
+// ===== 更新ボタン → yoyakuワークフローをトリガー =====
+function triggerUpdate() {
+  const btn = document.getElementById('updateBtn');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  const requestId = 'req-' + Date.now() + '-' + Math.random().toString(36).slice(-4);
+
+  fetch(GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'update',
+      area: AREA_KEY,
+      requestId
+    }),
+    keepalive: true
+  })
+  .then(r => r.json())
+  .then(data => {
+    if (data.result === 'OK') {
+      btn.textContent = '更新中...';
+      // 5分後にデータを再取得してグリッドを更新
+      setTimeout(() => {
+        btn.textContent = '再読込中';
+        fetchMapData().then(() => {
+          btn.disabled = false;
+          btn.textContent = '更新';
+        });
+      }, 5 * 60 * 1000);
+    } else {
+      throw new Error(data.error || '更新失敗');
+    }
+  })
+  .catch(err => {
+    console.error('更新エラー:', err);
+    btn.disabled = false;
+    btn.textContent = '更新';
+    alert('更新リクエストに失敗しました。再度お試しください。');
+  });
+}
 function goTireApp(plate, stationName, model) {
   const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html?city=tama';
 
