@@ -799,19 +799,6 @@ document.getElementById('overlay').addEventListener('touchstart', (e) => {
   closeDetail();
 }, { passive: false });
 
-// 詳細パネルの下スワイプで閉じる
-const detailPanel = document.getElementById('detailPanel');
-let swipeStartY = 0;
-detailPanel.addEventListener('touchstart', (e) => {
-  swipeStartY = e.touches[0].clientY;
-}, { passive: true });
-detailPanel.addEventListener('touchend', (e) => {
-  const swipeEndY = e.changedTouches[0].clientY;
-  if (swipeEndY - swipeStartY > 60) { // 60px以上下にスワイプで閉じる
-    closeDetail();
-  }
-}, { passive: true });
-
 // ===== ミニマップ =====
 function initMinimap() {
   const MINI_W = 120, MINI_H = 120;
