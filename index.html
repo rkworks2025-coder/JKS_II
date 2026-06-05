@@ -621,7 +621,13 @@ function renderGrid() {
     label.innerHTML = `<div class="hex-name" style="color:#e8f4ff;">${shortName(s.station_name)}</div>`;
     grid.appendChild(label);
 
-    wrapper.addEventListener('click', () => openDetail(s));
+    if (s.status === 'checked' || s.status === 'unnecessary') {
+      wrapper.style.cursor = 'default';
+      wrapper.style.opacity = '0.6';
+      wrapper.addEventListener('click', () => {});
+    } else {
+      wrapper.addEventListener('click', () => openDetail(s));
+    }
     grid.appendChild(wrapper);
     stationWrappers.set(s.stationCd, wrapper);
   });
