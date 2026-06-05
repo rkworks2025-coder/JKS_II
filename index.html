@@ -873,14 +873,11 @@ const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_r
 // ===== 点検ボタン → タイヤ点検アプリへ遷移 =====
 function goTireApp(plate, stationName, model) {
   const JUNKAI_APP_URL = 'https://rkworks2025-coder.github.io/-/';
-
-  // スワイプバックで巡回アプリに戻れるよう、履歴を巡回アプリのURLに書き換える
-  history.replaceState(null, '', JUNKAI_APP_URL);
-
   const params = new URLSearchParams({
     station:    stationName,
     model:      model,
-    plate_full: plate
+    plate_full: plate,
+    return_to:  JUNKAI_APP_URL  // 送信完了後の戻り先
   });
   location.href = `${TIRE_APP_URL}?${params.toString()}`;
 }
