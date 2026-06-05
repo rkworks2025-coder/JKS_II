@@ -249,13 +249,20 @@ function statusFill(status) {
 // ステーションwrapperの参照を保持
 const stationWrappers = new Map();
 
+// グリッド範囲（renderGrid・initMinimap・GPS共用）
+let allQ, allR, qMin, qMax, rMin, rMax, occupiedKeys;
+
+function updateGridRanges() {
+  allQ = STATIONS.map(s => s.q);
+  allR = STATIONS.map(s => s.r);
+  qMin = Math.min(...allQ); qMax = Math.max(...allQ);
+  rMin = Math.min(...allR); rMax = Math.max(...allR);
+  occupiedKeys = new Set(STATIONS.map(s => `${s.q},${s.r}`));
+}
+updateGridRanges();
+
 function renderGrid() {
-  // エリア切り替え時に動的に再計算
-  const allQ = STATIONS.map(s => s.q);
-  const allR = STATIONS.map(s => s.r);
-  const qMin = Math.min(...allQ), qMax = Math.max(...allQ);
-  const rMin = Math.min(...allR), rMax = Math.max(...allR);
-  const occupiedKeys = new Set(STATIONS.map(s => `${s.q},${s.r}`));
+  updateGridRanges();
 
   // 既存のステーションセルをクリア
   document.querySelectorAll('.hex-wrapper, .hex-label').forEach(el => el.remove());
