@@ -447,39 +447,32 @@ async function fetchMapData() {
     const data = await res.json();
     if (data.result !== 'OK') throw new Error(data.error || 'GASエラー');
 
-    // stationCd → データのマップを構築
     data.stations.forEach(st => {
       gasStationMap.set(st.stationCd, st);
     });
 
-    // STATIONSにステータスを反映
     STATIONS.forEach(s => {
       const gas = gasStationMap.get(s.stationCd);
-      s.status   = gas ? gas.status : 'unknown';
-      s.total    = gas ? gas.total  : 0;
-      s.standby  = gas ? gas.standby : 0;
-      s.checked  = gas ? gas.checked : 0;
+      s.status    = gas ? gas.status    : 'unknown';
+      s.total     = gas ? gas.total     : 0;
+      s.standby   = gas ? gas.standby   : 0;
+      s.checked   = gas ? gas.checked   : 0;
       s.hasUrgent = gas ? gas.hasUrgent : false;
     });
 
-    renderGrid();
-    updateCounts();
-    initMinimap();
-    initPanZoom();
-    startGps();
-
   } catch(err) {
     console.error('データ取得失敗:', err);
-    // フォールバック: 全standbyで描画
     STATIONS.forEach(s => { s.status = 'standby'; s.total = 0; });
-    renderGrid();
-    updateCounts();
-    initMinimap();
-    initPanZoom();
-    startGps();
-  } finally {
-    showLoading(false);
   }
+
+  // 描画は成功・失敗どちらでも同じ順序で実行
+  renderGrid();
+  updateCounts();
+  initMinimap();
+  initPanZoom();
+  showLoading(false);
+  // グリッドDOM確定後にGPS起動
+  startGps();
 }
 
 function showLoading(show) {
@@ -735,19 +728,21 @@ function onGpsError(err) {
 }
 
 function startGps() {
-  // renderGrid完了後に実行されることを保証するため少し遅延
-  setTimeout(() => {
-    // ===== デバッグ用ダミー座標（確認後に削除） =====
-    onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
-    // =============================================
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
-      enableHighAccuracy: true, timeout: 10000
+  // DOMのレンダリングサイクル完了後に実行
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      // ===== デバッグ用ダミー座標（確認後に削除） =====
+      onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
+      // =============================================
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
+        enableHighAccuracy: true, timeout: 10000
+      });
+      watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
+        enableHighAccuracy: true, maximumAge: 30000
+      });
     });
-    watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
-      enableHighAccuracy: true, maximumAge: 30000
-    });
-  }, 300);
+  });
 }
 
 startGps();
