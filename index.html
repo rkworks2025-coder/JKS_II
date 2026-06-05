@@ -870,23 +870,18 @@ const TIRE_APP_URL = 'https://rkworks2025-coder.github.io/TireCheck/';
 const WORK_APP_URL = 'https://rkworks2025-coder.github.io/work/';
 const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_rqm6mk-Os3XBH6C731aGxk7ecJC5U3XjtwfMkeF429rezkAo79jN/exec';
 
-// ===== 点検ボタン → area.html経由でタイヤ点検アプリへ遷移 =====
+// ===== 点検ボタン → 巡回アプリを別ウィンドウで開いて該当車両の点検ボタンを自動クリック =====
 function goTireApp(plate, stationName, model) {
-  const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html';
-  const tireParams = new URLSearchParams({
-    station:    stationName,
-    model:      model,
-    plate_full: plate
-  });
-  const tireUrl = `${TIRE_APP_URL}?${tireParams.toString()}`;
+  const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html?city=tama';
 
-  // area.html?city=tama&next=タイヤ点検アプリURL を経由
-  // → area.htmlが履歴に積まれる → スワイプバックでarea.htmlに戻れる
-  const areaParams = new URLSearchParams({
-    city: AREA_KEY,
-    next: tireUrl
-  });
-  location.href = `${JUNKAI_AREA_URL}?${areaParams.toString()}`;
+  // 巡回アプリ側に「この車両の点検ボタンを自動クリックして」という指示をlocalStorageで渡す
+  try {
+    localStorage.setItem('junkai:auto_tire_plate',   plate);
+    localStorage.setItem('junkai:auto_tire_station', stationName);
+    localStorage.setItem('junkai:auto_tire_model',   model);
+  } catch(e) { console.error(e); }
+
+  window.open(JUNKAI_AREA_URL, '_blank');
 }
 
 // ===== TMAボタン → 作業管理アプリへ遷移 =====
