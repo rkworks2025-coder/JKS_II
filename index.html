@@ -870,17 +870,23 @@ const TIRE_APP_URL = 'https://rkworks2025-coder.github.io/TireCheck/';
 const WORK_APP_URL = 'https://rkworks2025-coder.github.io/work/';
 const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_rqm6mk-Os3XBH6C731aGxk7ecJC5U3XjtwfMkeF429rezkAo79jN/exec';
 
-// ===== 点検ボタン → タイヤ点検アプリへ遷移 =====
+// ===== 点検ボタン → area.html経由でタイヤ点検アプリへ遷移 =====
 function goTireApp(plate, stationName, model) {
-  const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html?city=tama';
-  const params = new URLSearchParams({
+  const JUNKAI_AREA_URL = 'https://rkworks2025-coder.github.io/-/area.html';
+  const tireParams = new URLSearchParams({
     station:    stationName,
     model:      model,
     plate_full: plate
   });
-  // スワイプバックでarea.htmlに戻れるよう履歴を書き換え
-  history.replaceState(null, '', JUNKAI_AREA_URL);
-  location.href = `${TIRE_APP_URL}?${params.toString()}`;
+  const tireUrl = `${TIRE_APP_URL}?${tireParams.toString()}`;
+
+  // area.html?city=tama&next=タイヤ点検アプリURL を経由
+  // → area.htmlが履歴に積まれる → スワイプバックでarea.htmlに戻れる
+  const areaParams = new URLSearchParams({
+    city: AREA_KEY,
+    next: tireUrl
+  });
+  location.href = `${JUNKAI_AREA_URL}?${areaParams.toString()}`;
 }
 
 // ===== TMAボタン → 作業管理アプリへ遷移 =====
