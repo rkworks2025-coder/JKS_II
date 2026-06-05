@@ -22,9 +22,9 @@
     --sevenday-glow: rgba(61,155,255,0.2);
     --stopped: #445060;
     --stopped-border: #2a3545;
-    --text-primary: #c8dff0;
-    --text-dim: #8aafc4;
-    --text-bright: #e8f4ff;
+    --text-primary: #e8f4ff;
+    --text-dim: #e8f4ff;
+    --text-bright: #ffffff;
     --accent: #00e5a0;
     --accent2: #3d9bff;
     --self: #ffe04d;
@@ -831,7 +831,7 @@ function buildTimeline(timeline, getTime) {
   // 現在時刻から経過スロット数を計算（予約表示アプリと同じロジック）
   const now = new Date();
   const diffMs = now - baseDate;
-  const elapsedSlots = Math.max(0, Math.floor(diffMs / (1000 * 60 * 15)));
+  const elapsedSlots = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 15)));
 
   // 現在位置から最大288スロット（72時間）を切り出す
   const displayStr = elapsedSlots < timelineStr.length
