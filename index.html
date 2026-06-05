@@ -675,12 +675,10 @@ const AXIAL_MIN_R = Math.min(...STATIONS.map(s => {
 }));
 
 function clearSelfCell() {
-  // ステーションセルの点滅解除
   if (selfWrapper) {
     selfWrapper.classList.remove('hex-self');
     selfWrapper = null;
   }
-  // 空白セル上の現在地SVGを削除
   if (selfSvgEl) {
     if (selfSvgEl._blink) clearInterval(selfSvgEl._blink);
     selfSvgEl.remove();
@@ -691,57 +689,34 @@ function clearSelfCell() {
 function setSelfCell(q, r) {
   clearSelfCell();
 
-  // ステーションセルかどうか判定
-  const station = STATIONS.find(s => s.q === q && s.r === r);
+  // q,rに対応するピクセル座標を計算
+  const {x, y} = hexToPixel(q, r);
+  const cx = x + offX;
+  const cy = y + offY;
 
-  if (station) {
-    // ステーションセル → wrapperにクラス付与して点滅
-    const wrappers = document.querySelectorAll('.hex-wrapper');
-    wrappers.forEach(w => {
-      const wx = parseFloat(w.style.left) + W/2 + 2;
-      const wy = parseFloat(w.style.top) + H/2 + 2;
-      const sx = station.px + offX;
-      const sy = station.py + offY;
-      if (Math.abs(wx - sx) < 2 && Math.abs(wy - sy) < 2) {
-        selfWrapper = w;
-        w.classList.add('hex-self');
-      }
-    });
-  } else {
-    // 空白セル → 現在地専用SVGを生成して重ねる
-    const {x, y} = hexToPixel(q, r);
-    const cx = x + offX;
-    const cy = y + offY;
+  // グリッド上に黄色の点滅SVGを直接生成（ステーション有無に関わらず）
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', W + 4);
+  svg.setAttribute('height', H + 4);
+  svg.style.cssText = `position:absolute;left:${cx-W/2-2}px;top:${cy-H/2-2}px;pointer-events:none;z-index:20;`;
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', W+4);
-    svg.setAttribute('height', H+4);
-    svg.style.cssText = `position:absolute;left:${cx-W/2-2}px;top:${cy-H/2-2}px;pointer-events:none;z-index:10;`;
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', hexPath(W/2+2, H/2+2, SIZE - 1));
+  path.setAttribute('fill', 'rgba(255,224,77,0.15)');
+  path.setAttribute('stroke', '#ffe04d');
+  path.setAttribute('stroke-width', '2.5');
+  svg.appendChild(path);
+  grid.appendChild(svg);
+  selfSvgEl = svg;
 
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', hexPath(W/2+2, H/2+2, SIZE - 1));
-    path.setAttribute('fill', 'rgba(255,224,77,0.08)');
-    path.setAttribute('stroke', '#ffe04d');
-    path.setAttribute('stroke-width', '2');
-    svg.appendChild(path);
-    grid.appendChild(svg);
-    selfSvgEl = svg;
+  // 点滅
+  let visible = true;
+  selfSvgEl._blink = setInterval(() => {
+    visible = !visible;
+    svg.style.opacity = visible ? '1' : '0.2';
+  }, 600);
 
-    // 点滅アニメーション
-    let visible = true;
-    selfSvgEl._blink = setInterval(() => {
-      visible = !visible;
-      svg.style.opacity = visible ? '1' : '0.3';
-    }, 600);
-  }
-
-  // ミニマップの現在地ドットも更新
-  updateMinimapSelf(q, r);
-}
-
-function updateMinimapSelf(q, r) {
-  // ミニマップcanvasに現在地を黄色ドットで描画
-  // initMinimap後に呼ばれるため、再描画関数を外に出す
+  // ミニマップ更新
   if (window._minimapRedraw) window._minimapRedraw(q, r);
 }
 
@@ -760,17 +735,19 @@ function onGpsError(err) {
 }
 
 function startGps() {
-  // ===== デバッグ用ダミー座標（確認後に削除） =====
-  // 聖蹟桜ヶ丘駅前交差点付近
-  onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
-  // =============================================
-  if (!navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
-    enableHighAccuracy: true, timeout: 10000
-  });
-  watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
-    enableHighAccuracy: true, maximumAge: 30000
-  });
+  // renderGrid完了後に実行されることを保証するため少し遅延
+  setTimeout(() => {
+    // ===== デバッグ用ダミー座標（確認後に削除） =====
+    onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
+    // =============================================
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
+      enableHighAccuracy: true, timeout: 10000
+    });
+    watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
+      enableHighAccuracy: true, maximumAge: 30000
+    });
+  }, 300);
 }
 
 startGps();
