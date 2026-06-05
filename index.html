@@ -365,7 +365,7 @@
 
 
 
-<div id="loadingOverlay" style="position:fixed;inset:0;background:rgba(7,11,18,0.9);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:300;">
+<div id="loadingOverlay" style="position:fixed;inset:0;background:rgba(7,11,18,0.98);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;">
   <div style="color:var(--accent);font-family:'Courier New',monospace;font-size:14px;letter-spacing:0.15em;margin-bottom:12px;">LOADING...</div>
   <div style="color:var(--text-dim);font-size:11px;">データを取得中</div>
 </div>
@@ -728,20 +728,16 @@ function onGpsError(err) {
 }
 
 function startGps() {
-  // DOMのレンダリングサイクル完了後に実行
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      // ===== デバッグ用ダミー座標（確認後に削除） =====
-      onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
-      // =============================================
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
-        enableHighAccuracy: true, timeout: 10000
-      });
-      watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
-        enableHighAccuracy: true, maximumAge: 30000
-      });
-    });
+  // ===== デバッグ用ダミー座標（確認後に削除） =====
+  onGpsSuccess({ coords: { latitude: 35.6505, longitude: 139.4455 } });
+  return; // デバッグ中はGPS取得をスキップ
+  // =============================================
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(onGpsSuccess, onGpsError, {
+    enableHighAccuracy: true, timeout: 10000
+  });
+  watchId = navigator.geolocation.watchPosition(onGpsSuccess, onGpsError, {
+    enableHighAccuracy: true, maximumAge: 30000
   });
 }
 
