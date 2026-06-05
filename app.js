@@ -634,7 +634,7 @@ function triggerUpdate() {
   });
 }
 // ===== スキャン機能 =====
-const SCAN_BADGES = ['①','②','③','④','⑤'];
+const SCAN_BADGES = ['1','2','3','4','5'];
 let scanWrappers = [];
 
 function clearScanBadges() {
