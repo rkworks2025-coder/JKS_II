@@ -977,7 +977,14 @@ function initPanZoom() {
 // タッチイベント
 mainArea.addEventListener('touchstart', (e) => {
   if (window._detailOpen) {
-    closeDetail();
+    // タッチ位置が詳細パネルの外かどうか判定
+    const panel = document.getElementById('detailPanel');
+    const panelRect = panel.getBoundingClientRect();
+    const touch = e.touches[0];
+    const isOutsidePanel = touch.clientY < panelRect.top;
+    if (isOutsidePanel) {
+      closeDetail();
+    }
     return;
   }
   if (e.touches.length === 2) {
