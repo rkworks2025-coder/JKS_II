@@ -822,22 +822,33 @@ function renderVehicleCards(container, vehicles, station) {
 }
 
 function buildTimeline(timeline, getTime) {
-  // getTime: タイムラインの基準日時文字列（例: "2026-06-05 12:00"）
-  // timelineStr: ○/s/x/× の288文字（72時間分）または576文字（144時間分）
   const timelineStr = timeline;
-  const totalSlots = timelineStr.length; // 288 or 576
-  const totalHours = totalSlots / 4;     // 72 or 144
+  if (!timelineStr) return document.createElement('div');
 
   let baseDate = new Date((getTime || '').replace(/-/g, '/'));
   if (isNaN(baseDate.getTime())) baseDate = new Date();
 
-  // 現在時刻からの経過スロット（GASで切り出し済みなので0が「今」）
-  // ラベルは baseDate から始まる実時刻で表示
+  // 現在時刻から経過スロット数を計算（予約表示アプリと同じロジック）
+  const now = new Date();
+  const diffMs = now - baseDate;
+  const elapsedSlots = Math.max(0, Math.floor(diffMs / (1000 * 60 * 15)));
+
+  // 現在位置から最大288スロット（72時間）を切り出す
+  const displayStr = elapsedSlots < timelineStr.length
+    ? timelineStr.slice(elapsedSlots, elapsedSlots + 288)
+    : '';
+
+  if (!displayStr) return document.createElement('div');
+
+  const totalSlots = displayStr.length;
+  const totalHours = totalSlots / 4;
+
+  // 現在時刻を基準にラベル用の時刻を計算
+  const labelBase = new Date(baseDate.getTime() + elapsedSlots * 15 * 60 * 1000);
 
   // タイムラインバー
   let slotsHtml = '';
-  for (let i = 0; i < totalSlots; i++) {
-    const ch = timelineStr[i];
+  for (const ch of displayStr) {
     const cls = ch === '○' ? 'tl-ok' : (ch === 's' ? 'tl-stopped' : 'tl-ng');
     slotsHtml += `<div class="tl-slot ${cls}"></div>`;
   }
@@ -846,7 +857,7 @@ function buildTimeline(timeline, getTime) {
   let labelsHtml = '', gridsHtml = '';
   for (let h = 0; h < totalHours; h++) {
     const leftPct = (h / totalHours) * 100;
-    const slotDate = new Date(baseDate.getTime() + h * 3600 * 1000);
+    const slotDate = new Date(labelBase.getTime() + h * 3600 * 1000);
     const hour = slotDate.getHours();
     if (hour % 2 === 0) {
       labelsHtml += `<div class="tl-label" style="left:${leftPct}%">${String(hour).padStart(2,'0')}</div>`;
@@ -861,7 +872,7 @@ function buildTimeline(timeline, getTime) {
   const wrapper = document.createElement('div');
   wrapper.className = 'tl-scroll';
   wrapper.innerHTML = `
-    <div class="tl-full" style="width:${totalHours === 144 ? 3200 : 1600}px">
+    <div class="tl-full" style="width:${Math.round(totalHours / 72 * 1600)}px">
       ${labelsHtml}
       <div class="tl-bar">${slotsHtml}</div>
       ${gridsHtml}
