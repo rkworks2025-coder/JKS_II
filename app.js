@@ -131,6 +131,7 @@ async function switchArea(areaKey) {
   // グリッドと空白セルをリセット
   grid._emptyDrawn = false;
   gasStationMap = new Map();
+  clearScanBadges();
 
   // データ再取得→描画→ミニマップ再初期化→パンズーム再初期化
   await fetchMapData();
@@ -632,6 +633,85 @@ function triggerUpdate() {
     alert('更新リクエストに失敗しました。再度お試しください。');
   });
 }
+// ===== スキャン機能 =====
+const SCAN_BADGES = ['①','②','③','④','⑤'];
+let scanWrappers = [];
+
+function clearScanBadges() {
+  scanWrappers.forEach(({wrapper, blinkId}) => {
+    wrapper.classList.remove('hex-scan-blink');
+    const badge = wrapper.querySelector('.scan-badge');
+    if (badge) badge.remove();
+    if (blinkId) clearInterval(blinkId);
+    const svgEl = wrapper.querySelector('svg');
+    if (svgEl) svgEl.style.opacity = '1';
+  });
+  scanWrappers = [];
+}
+
+function applyScanBadges(items) {
+  clearScanBadges();
+  items.slice(0, 5).forEach((item, idx) => {
+    const s = STATIONS.find(st => st.station_name === item.station);
+    if (!s) return;
+    const wrapper = stationWrappers.get(s.stationCd);
+    if (!wrapper) return;
+
+    // バッジ（赤丸に白文字）
+    const badge = document.createElement('div');
+    badge.className = 'scan-badge';
+    badge.textContent = SCAN_BADGES[idx];
+    wrapper.appendChild(badge);
+
+    // 枠の点滅
+    const svgEl = wrapper.querySelector('svg');
+    let blinkOn = true;
+    const blinkId = setInterval(() => {
+      blinkOn = !blinkOn;
+      if (svgEl) svgEl.style.opacity = blinkOn ? '1' : '0.25';
+    }, 500);
+
+    scanWrappers.push({ wrapper, blinkId });
+  });
+}
+
+async function triggerScan() {
+  const btn = document.getElementById('scanBtn');
+  if (!navigator.geolocation) {
+    alert('GPS非対応のブラウザです');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add('scanning');
+  btn.textContent = '取得中...';
+
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    btn.textContent = 'スキャン中...';
+    try {
+      const res = await fetch(`${GAS_URL}?action=scan&lat=${lat}&lng=${lng}&area=${AREA_KEY()}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      applyScanBadges(data.items || []);
+    } catch(err) {
+      console.error('スキャンエラー:', err);
+      alert('スキャン失敗: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.classList.remove('scanning');
+      btn.textContent = 'スキャン';
+    }
+  }, (err) => {
+    console.warn('GPS取得失敗:', err.message);
+    alert('現在地を取得できませんでした');
+    btn.disabled = false;
+    btn.classList.remove('scanning');
+    btn.textContent = 'スキャン';
+  }, { enableHighAccuracy: true, timeout: 10000 });
+}
+
 function goTireApp(plate, stationName, model) {
   const JUNKAI_AREA_URL = `https://rkworks2025-coder.github.io/-/area.html?city=${CURRENT_AREA}`;
 
