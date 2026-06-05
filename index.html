@@ -803,8 +803,6 @@ function renderVehicleCards(container, vehicles, station) {
       </div>
       <div class="vehicle-actions">
         <button class="btn-small btn-tire" onclick="goTireApp('${v.plate}','${station.station_name}','${v.model}')">点検</button>
-        <button class="btn-small btn-tma tma-btn-real" data-plate="${v.plate}" onclick="goTmaAction('${v.plate}','${station.station_name}','${v.model}',this)">TMA</button>
-        <button class="btn-small btn-check" onclick="doCheck('${v.plate}','${station.station_name}',true,this)">✓</button>
       </div>
     `;
     card.appendChild(topRow);
