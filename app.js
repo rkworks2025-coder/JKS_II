@@ -474,13 +474,12 @@ function startGps() {
   });
 }
 
-startGps();
-
 // ===== 詳細パネル =====
 let currentStation = null;
 
 function openDetail(station) {
   currentStation = station;
+  window._detailOpen = true;
   document.getElementById('detailStation').textContent = station.station_name;
   document.getElementById('detailCd').textContent = `ST: ${station.stationCd} ／ ${station.total || 0}台`;
 
@@ -785,6 +784,7 @@ window.addEventListener('pageshow', (e) => {
 function closeDetail() {
   document.getElementById('detailPanel').classList.remove('show');
   document.getElementById('overlay').classList.remove('show');
+  window._detailOpen = false;
 }
 
 function openNav() {
@@ -792,6 +792,12 @@ function openNav() {
   const url = `https://www.google.com/maps/dir/?api=1&destination=${currentStation.lat},${currentStation.lng}&travelmode=driving`;
   window.open(url, '_blank');
 }
+
+// オーバーレイタッチでcloseDetail
+document.getElementById('overlay').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  closeDetail();
+}, { passive: false });
 
 // ===== ミニマップ =====
 function initMinimap() {
@@ -879,10 +885,29 @@ function initMinimap() {
     viewport.style.height = Math.min(visH, MINI_H) + 'px';
   };
 
-  window.addEventListener('resize', window._updateMinimapViewport);
+  window._updateMinimapViewport = () => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight - 52;
+    const visLeft   = (-panX / curScale) * scale + padX;
+    const visTop    = (-panY / curScale) * scale + padY;
+    const visW      = (vw / curScale) * scale;
+    const visH      = (vh / curScale) * scale;
+    viewport.style.left   = Math.max(0, visLeft) + 'px';
+    viewport.style.top    = Math.max(0, visTop)  + 'px';
+    viewport.style.width  = Math.min(visW, MINI_W) + 'px';
+    viewport.style.height = Math.min(visH, MINI_H) + 'px';
+  };
 
-  // ミニマップクリックでジャンプ
-  document.getElementById('minimap').addEventListener('click', (e) => {
+  // resizeリスナーは一度だけ登録
+  if (!window._minimapResizeAdded) {
+    window.addEventListener('resize', () => { if (window._updateMinimapViewport) window._updateMinimapViewport(); });
+    window._minimapResizeAdded = true;
+  }
+
+  // ミニマップクリックはoldListenerを除去して再登録
+  const minimap = document.getElementById('minimap');
+  if (minimap._clickHandler) minimap.removeEventListener('click', minimap._clickHandler);
+  minimap._clickHandler = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -891,7 +916,8 @@ function initMinimap() {
     panX = -(gridX * curScale) + window.innerWidth  / 2;
     panY = -(gridY * curScale) + (window.innerHeight - 52) / 2;
     applyTransform();
-  });
+  };
+  minimap.addEventListener('click', minimap._clickHandler);
 }
 
 // ===== ピンチズーム・パン =====
@@ -931,14 +957,15 @@ function clampPan() {
 }
 
 function initPanZoom() {
-  // 初期スケール: グリッド全体が画面に収まるスケール
   const vw = window.innerWidth;
   const vh = window.innerHeight - 52;
   const scaleX = vw / gridW;
   const scaleY = vh / gridH;
   curScale = Math.min(scaleX, scaleY) * 0.92;
-  // 初期位置: 聖蹟エリアを中心に
-  const target = STATIONS.find(s => s.stationCd === 'R265');
+
+  // 初期フォーカス: エリアに応じた中心ステーション
+  const focusCd = CURRENT_AREA === 'fuchu' ? 'T864' : 'R265'; // 府中町第３ or 聖蹟桜ヶ丘駅前交差点
+  const target = STATIONS.find(s => s.stationCd === focusCd) || STATIONS[0];
   if (target) {
     panX = vw / 2 - (target.px + offX) * curScale;
     panY = vh / 2 - (target.py + offY) * curScale;
@@ -949,6 +976,7 @@ function initPanZoom() {
 
 // タッチイベント
 mainArea.addEventListener('touchstart', (e) => {
+  if (window._detailOpen) return;
   if (e.touches.length === 2) {
     isPinching = true;
     isDragging = false;
@@ -968,6 +996,7 @@ mainArea.addEventListener('touchstart', (e) => {
 }, { passive: true });
 
 mainArea.addEventListener('touchmove', (e) => {
+  if (window._detailOpen) return;
   e.preventDefault();
   if (isPinching && e.touches.length === 2) {
     const dx = e.touches[1].clientX - e.touches[0].clientX;
