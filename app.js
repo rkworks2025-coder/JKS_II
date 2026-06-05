@@ -123,8 +123,7 @@ async function switchArea(areaKey) {
   recalcGpsRef();
   recalcAxialMin();
 
-  // ヘッダー表示更新
-  document.getElementById('headerArea').textContent = areaKey === 'fuchu' ? '府中市' : '多摩市';
+  // ヘッダータブのactive切り替え
   document.querySelectorAll('.area-tab').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.area === areaKey);
   });
@@ -337,8 +336,7 @@ function renderGrid() {
 }
 
 function updateCounts() {
-  document.getElementById('cnt-standby').textContent = STATIONS.filter(s => s.status === 'standby').length;
-  document.getElementById('cnt-checked').textContent  = STATIONS.filter(s => s.status === 'checked').length;
+  // standby/checked表示は削除済み
 }
 
 function shortName(name) {
