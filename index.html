@@ -802,9 +802,9 @@ function renderVehicleCards(container, vehicles, station) {
         ${v.lastChecked ? `<div style="font-size:9px;color:var(--text-dim);margin-top:2px;">前回: ${v.lastChecked}</div>` : ''}
       </div>
       <div class="vehicle-actions">
-        <button class="btn-small btn-tire" onclick="goTireApp('${v.plate}','${station.stationCd}','${station.station_name}','${v.model}')">点検</button>
-        <button class="btn-small btn-tma"  onclick="goTmaAction('${v.plate}','${station.stationCd}','${v.model}')">TMA</button>
-        <button class="btn-small btn-check" onclick="doCheck('${v.plate}','${station.station_name}')">✓</button>
+        <button class="btn-small btn-tire" onclick="goTireApp('${v.plate}','${station.station_name}','${v.model}')">点検</button>
+        <button class="btn-small btn-tma tma-btn-real" data-plate="${v.plate}" onclick="goTmaAction('${v.plate}','${station.station_name}','${v.model}',this)">TMA</button>
+        <button class="btn-small btn-check" onclick="doCheck('${v.plate}','${station.station_name}',true,this)">✓</button>
       </div>
     `;
     card.appendChild(topRow);
@@ -868,49 +868,153 @@ function buildTimeline(timeline, getTime) {
   return wrapper;
 }
 
-// 点検ボタン → タイヤ点検アプリへ遷移
-function goTireApp(plate, stationCd, stationName, model) {
-  const TIRE_APP_URL = 'https://rkworks2025-coder.github.io/r.k.w-/';
-  const params = new URLSearchParams({ plate, station: stationCd, station_name: stationName, model });
+const TIRE_APP_URL = 'https://rkworks2025-coder.github.io/r.k.w-/';
+const WORK_APP_URL = 'https://rkworks2025-coder.github.io/work/';
+const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_rqm6mk-Os3XBH6C731aGxk7ecJC5U3XjtwfMkeF429rezkAo79jN/exec';
+
+// ===== 点検ボタン → タイヤ点検アプリへ遷移 =====
+function goTireApp(plate, stationName, model) {
+  const params = new URLSearchParams({
+    station: stationName,
+    model:   model,
+    plate_full: plate
+  });
   location.href = `${TIRE_APP_URL}?${params.toString()}`;
 }
 
-// TMAボタン → 作業管理アプリへ遷移
-function goTmaAction(plate, stationCd, model) {
-  const WORK_APP_URL = 'https://rkworks2025-coder.github.io/work/'; // 要確認
+// ===== TMAボタン → 作業管理アプリへ遷移 =====
+function goTmaAction(plate, stationName, model, btnEl) {
+  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '遷移中'; }
+
   const requestId = 'req-' + Date.now() + '-' + Math.random().toString(36).slice(-4);
-  const params = new URLSearchParams({ plate_full: plate, station: stationCd, model, tma_plate: plate, tma_req_id: requestId });
+  const params = new URLSearchParams({
+    station:    stationName,
+    model:      model,
+    plate_full: plate,
+    tma_plate:  plate,
+    tma_req_id: requestId
+  });
+
+  // タイヤ点検アプリがプリロードした splash_img があれば引き継ぐ
+  const preloadedImg = localStorage.getItem('junkai:preloaded_splash_url');
+  if (preloadedImg) {
+    params.set('splash_img', preloadedImg);
+    localStorage.removeItem('junkai:preloaded_splash_url');
+  }
+
+  // GAS通信は作業管理アプリ側で行う（ここでは遷移のみ）
   location.href = `${WORK_APP_URL}?${params.toString()}`;
 }
 
-// チェックボタン → inspectionlogのstatusをcheckedに更新
-function doCheck(plate, stationName) {
-  // 確認モーダル（後でカスタムモーダルに差し替え）
-  if (!confirm(`${plate} をcheckedにしますか？`)) return;
+// ===== チェックボタン =====
+function doCheck(plate, stationName, checked, btnEl) {
+  // モーダル確認
+  showCheckModal(plate, checked, () => {
+    _executeCheck(plate, stationName, checked, btnEl);
+  });
+}
 
-  const JUNKAI_GAS_URL = 'https://script.google.com/macros/s/AKfycbyXbPaarnD7mQa_rqm6mk-Os3XBH6C731aGxk7ecJC5U3XjtwfMkeF429rezkAo79jN/exec';
-  const body = new URLSearchParams();
-  body.set('action', 'syncInspection');
-  body.set('plate', plate);
-  body.set('station', stationName);
-  body.set('checked', 'true');
+function _executeCheck(plate, stationName, checked, btnEl) {
+  if (btnEl) { btnEl.disabled = true; }
 
-  fetch(JUNKAI_GAS_URL, { method: 'POST', body, keepalive: true })
-    .then(r => r.json())
-    .then(() => {
-      // ステータスを即座にUIに反映
-      const s = STATIONS.find(st => st.station_name === stationName);
-      if (s) {
+  // 巡回アプリと同じsyncInspectionAll形式でPOST
+  const payload = [{
+    plate,
+    station: stationName,
+    checked,
+    status: checked ? 'checked' : 'standby'
+  }];
+
+  fetch(JUNKAI_GAS_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action: 'syncInspection', data: payload }),
+    keepalive: true
+  })
+  .then(r => r.json())
+  .then(() => {
+    // UIを即座に反映
+    const s = STATIONS.find(st => st.station_name === stationName);
+    if (s) {
+      if (checked) {
         s.standby = Math.max(0, (s.standby || 1) - 1);
         s.checked = (s.checked || 0) + 1;
         if (s.standby === 0) s.status = 'checked';
-        renderGrid();
-        updateCounts();
+      } else {
+        s.standby = (s.standby || 0) + 1;
+        s.checked = Math.max(0, (s.checked || 1) - 1);
+        if (s.standby > 0) s.status = 'standby';
       }
-      closeDetail();
-    })
-    .catch(() => alert('送信失敗。再度お試しください。'));
+      renderGrid();
+      updateCounts();
+    }
+    closeDetail();
+  })
+  .catch(() => {
+    if (btnEl) { btnEl.disabled = false; }
+    alert('送信失敗。再度お試しください。');
+  });
 }
+
+// チェック確認モーダル
+function showCheckModal(plate, checked, onOk) {
+  const msg = checked ? `【${plate}】\nチェックしますか？` : `【${plate}】\nチェックを外しますか？`;
+  if (confirm(msg)) onOk();
+}
+
+// ===== pageshow: 戻り時の自動アクション（巡回アプリのhandleReturnActionsと同等） =====
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+
+  // 1. 作業管理アプリからの戻り → 該当車両を自動チェック
+  const compPlate = localStorage.getItem('junkai:completed_plate');
+  if (compPlate) {
+    localStorage.removeItem('junkai:completed_plate');
+    // JKS-IIでは詳細パネルが開いたままの場合があるため、
+    // 該当ステーションを再取得してチェック処理
+    const station = STATIONS.find(s =>
+      s.station_name === currentStation?.station_name
+    );
+    if (station && currentStation) {
+      _executeCheck(compPlate, currentStation.station_name, true, null);
+    }
+  }
+
+  // 2. タイヤ点検アプリからの戻り → TMAボタンを自動発火
+  const tireCompPlate = localStorage.getItem('junkai:tire_completed_plate');
+  if (!tireCompPlate) return;
+
+  const workMode = localStorage.getItem('junkai:work_mode') || 'single';
+  if (workMode === 'continuous') {
+    localStorage.removeItem('junkai:tire_completed_plate');
+    return;
+  }
+
+  // 詳細パネルが開いていれば該当車両のTMAボタンを自動クリック
+  // 最大3秒（100ms × 30回）監視
+  let retryCount = 0;
+  const maxRetries = 30;
+  const monitorInterval = setInterval(() => {
+    // 車両カード内のTMAボタンを探す
+    const tmaBtns = document.querySelectorAll('.tma-btn-real');
+    let fired = false;
+    tmaBtns.forEach(btn => {
+      if (btn.dataset.plate === tireCompPlate && !btn.disabled) {
+        clearInterval(monitorInterval);
+        localStorage.removeItem('junkai:tire_completed_plate');
+        btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => btn.click(), 400);
+        fired = true;
+      }
+    });
+    if (fired) return;
+
+    retryCount++;
+    if (retryCount >= maxRetries) {
+      clearInterval(monitorInterval);
+      localStorage.removeItem('junkai:tire_completed_plate');
+    }
+  }, 100);
+});
 
 function closeDetail() {
   document.getElementById('detailPanel').classList.remove('show');
