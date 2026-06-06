@@ -635,6 +635,24 @@ function triggerUpdate() {
 }
 // ===== スキャン機能 =====
 let scanWrappers = [];
+let scanMode = localStorage.getItem('jks_scan_mode') || 'normal';
+
+function switchScanMode(mode) {
+  scanMode = mode;
+  localStorage.setItem('jks_scan_mode', mode);
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  clearScanBadges();
+}
+
+// 初期モードをボタンに反映（DOM構築後）
+document.addEventListener('DOMContentLoaded', () => {
+  switchScanMode(scanMode);
+});
+
+
+
 
 function clearScanBadges() {
   scanWrappers.forEach(({wrapper, blinkId}) => {
@@ -648,21 +666,69 @@ function clearScanBadges() {
   scanWrappers = [];
 }
 
+function filterByClusterMode(items) {
+  // ステーション単位でグループ化
+  const groups = new Map();
+  items.forEach(item => {
+    if (!groups.has(item.station)) groups.set(item.station, []);
+    groups.get(item.station).push(item);
+  });
+
+  const displayItems = [];
+  groups.forEach((group, stationName) => {
+    const rep = group.find(c => c.isUrgent) || group[0];
+    const activeCount = group.length;
+    const total = rep.stationTotal || activeCount;
+    const checked = rep.stationChecked || 0;
+    const remaining = total - checked;
+
+    // 初代JKSと同じ完遂条件ロジック
+    let shouldShow = false;
+    if (remaining === 1 && activeCount >= 1) {
+      shouldShow = true;
+    } else if (remaining === 2 && activeCount >= 2) {
+      shouldShow = true;
+    } else if (remaining === 3 && activeCount >= 3) {
+      shouldShow = true;
+    } else if (total >= 4 && remaining >= 4 && activeCount >= 2) {
+      shouldShow = true;
+      // 作業後に残り1台になる場合は非表示
+      if ((remaining - activeCount) === 1) shouldShow = false;
+    }
+
+    if (shouldShow) {
+      rep.clusterInfo = { activeCount, total, remaining };
+      displayItems.push(rep);
+    }
+  });
+
+  return displayItems.slice(0, 5);
+}
+
 function applyScanBadges(items) {
   clearScanBadges();
 
-  // 同一ステーションが複数台返ってくる場合があるのでユニーク化
-  const uniqueStations = [];
-  const seen = new Set();
-  for (const item of items) {
-    if (!seen.has(item.station)) {
-      seen.add(item.station);
-      uniqueStations.push(item);
+  let displayItems;
+  if (scanMode === 'cluster') {
+    displayItems = filterByClusterMode(items);
+    if (displayItems.length === 0) {
+      alert('完遂条件を満たすステーションが見つかりません');
+      return;
     }
-    if (uniqueStations.length >= 5) break;
+  } else {
+    // ノーマルモード: 同一ステーションをユニーク化して上位5件
+    const seen = new Set();
+    displayItems = [];
+    for (const item of items) {
+      if (!seen.has(item.station)) {
+        seen.add(item.station);
+        displayItems.push(item);
+      }
+      if (displayItems.length >= 5) break;
+    }
   }
 
-  uniqueStations.forEach((item, idx) => {
+  displayItems.forEach((item, idx) => {
     const s = STATIONS.find(st => st.station_name === item.station);
     if (!s) return;
     const wrapper = stationWrappers.get(s.stationCd);
@@ -672,6 +738,9 @@ function applyScanBadges(items) {
     const badge = document.createElement('div');
     badge.className = 'scan-badge';
     badge.textContent = String(idx + 1);
+
+    // クラスターモードはバッジ色を変える（青）
+    if (scanMode === 'cluster') badge.style.background = '#3d9bff';
     wrapper.appendChild(badge);
 
     // 枠の点滅
