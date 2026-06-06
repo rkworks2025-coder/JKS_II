@@ -21,6 +21,12 @@
   <button id="scanBtn" class="scan-btn" onclick="triggerScan()">スキャン</button>
 </header>
 
+<div class="subbar">
+  <span class="subbar-label">スキャンモード:</span>
+  <button class="mode-btn active" data-mode="normal" onclick="switchScanMode('normal')">ノーマル</button>
+  <button class="mode-btn" data-mode="cluster" onclick="switchScanMode('cluster')">クラスター</button>
+</div>
+
 <div class="main" id="mainArea">
   <div class="grid-transform" id="gridTransform">
     <div class="hex-grid" id="hexGrid"></div>
