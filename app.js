@@ -802,7 +802,7 @@ function goTireApp(plate, stationName, model) {
     localStorage.setItem('junkai:auto_tire_model',   model);
   } catch(e) { console.error(e); }
 
-  window.open(JUNKAI_AREA_URL, '_blank');
+  window.open(JUNKAI_AREA_URL, 'junkai_patrol');
 }
 
 // ===== TMAボタン → 作業管理アプリへ遷移 =====
