@@ -792,6 +792,20 @@ async function triggerScan() {
   }, { enableHighAccuracy: true, timeout: 10000 });
 }
 
+function showToast(msg) {
+  let toast = document.getElementById('jks2-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'jks2-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('show');
+  if (toast._timer) clearTimeout(toast._timer);
+  // タップで早期に閉じられる
+  toast.onclick = () => { toast.classList.remove('show'); };
+}
+
 function goTireApp(plate, stationName, model) {
   const JUNKAI_AREA_URL = `https://rkworks2025-coder.github.io/-/area.html?city=${CURRENT_AREA}`;
 
@@ -802,7 +816,8 @@ function goTireApp(plate, stationName, model) {
     localStorage.setItem('junkai:auto_tire_model',   model);
   } catch(e) { console.error(e); }
 
-  window.open(JUNKAI_AREA_URL, 'junkai_patrol');
+  // 巡回アプリへの切り替えを促すトースト
+  showToast(`【${plate}】\n巡回アプリに切り替えてください`);
 }
 
 // ===== TMAボタン → 作業管理アプリへ遷移 =====
@@ -937,6 +952,34 @@ window.addEventListener('pageshow', (e) => {
       localStorage.removeItem('junkai:tire_completed_plate');
     }
   }, 100);
+});
+
+// ===== visibilitychange: JKS-IIがフォアグラウンドに戻った時 =====
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+
+  // 詳細パネルが開いていれば該当ステーションのデータを再取得
+  if (window._detailOpen && currentStation) {
+    const container = document.getElementById('detailVehicles');
+    fetch(`${GAS_URL}?action=getStationDetail&station=${encodeURIComponent(currentStation.station_name)}&area=${AREA_KEY()}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.result !== 'OK') return;
+        if (data.vehicles.length === 0) {
+          // 全台完了 → パネルを閉じてグリッドを更新
+          closeDetail();
+          fetchMapData();
+        } else {
+          // 残り台数あり → パネルを再描画してグリッドも更新
+          renderVehicleCards(container, data.vehicles, currentStation);
+          fetchMapData();
+        }
+      })
+      .catch(() => {});
+  } else {
+    // 詳細パネルが閉じていれば全体グリッドを更新
+    fetchMapData();
+  }
 });
 
 function closeDetail() {
