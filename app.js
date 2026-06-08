@@ -151,23 +151,26 @@ function applyMapData(stations) {
   });
 }
 
-function renderAfterData() {
+function renderAfterData(silent = false) {
   renderGrid();
   updateCounts();
   initMinimap();
-  initPanZoom();
-  if (!window._gpsStarted) {
-    window._gpsStarted = true;
-    startGps();
-  } else {
-    try {
-      const cached = localStorage.getItem(GPS_CACHE_KEY);
-      if (cached) {
-        const { lat, lng } = JSON.parse(cached);
-        onGpsSuccess({ coords: { latitude: lat, longitude: lng } });
-      }
-    } catch(e) {}
-  }
+  if (!silent) initPanZoom();
+  // GPS表示はDOMが確定してから実行
+  requestAnimationFrame(() => {
+    if (!window._gpsStarted) {
+      window._gpsStarted = true;
+      startGps();
+    } else {
+      try {
+        const cached = localStorage.getItem(GPS_CACHE_KEY);
+        if (cached) {
+          const { lat, lng } = JSON.parse(cached);
+          onGpsSuccess({ coords: { latitude: lat, longitude: lng } });
+        }
+      } catch(e) {}
+    }
+  });
 }
 
 async function fetchMapData(silent = false) {
@@ -178,7 +181,7 @@ async function fetchMapData(silent = false) {
       if (cacheRaw) {
         const cache = JSON.parse(cacheRaw);
         applyMapData(cache.stations);
-        renderAfterData();
+        renderAfterData(false);
         showLoading(false);
       } else {
         showLoading(true);
@@ -193,7 +196,6 @@ async function fetchMapData(silent = false) {
     const data = await res.json();
     if (data.result !== 'OK') throw new Error(data.error || 'GASエラー');
 
-    // キャッシュに保存
     try {
       localStorage.setItem(MAP_CACHE_KEY + '_' + AREA_KEY(), JSON.stringify({ stations: data.stations, ts: Date.now() }));
     } catch(e) {}
@@ -206,7 +208,8 @@ async function fetchMapData(silent = false) {
     STATIONS.forEach(s => { s.status = 'standby'; s.total = 0; });
   }
 
-  renderAfterData();
+  // silentの場合はPanZoom再初期化しない（現在のスクロール位置を維持）
+  renderAfterData(silent);
   showLoading(false);
 }
 
