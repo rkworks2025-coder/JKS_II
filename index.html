@@ -4,8 +4,213 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>JKS-II マップ形式プレビュー</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #070b12; font-family: 'Helvetica Neue', sans-serif; }
+
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 52px;
+    background: rgba(7,11,18,0.97);
+    border-bottom: 1px solid #1a2d40;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    z-index: 1000;
+  }
+  .header-title { font-size: 13px; font-weight: bold; color: #00e5a0; letter-spacing: 0.12em; }
+  .area-tabs { display: flex; gap: 3px; margin-left: 6px; }
+  .area-tab { padding: 3px 7px; font-size: 10px; border: 1px solid #2a3d52; color: #e8f4ff; background: transparent; border-radius: 4px; cursor: pointer; }
+  .area-tab.active { border-color: #00e5a0; color: #00e5a0; background: rgba(0,229,160,0.08); }
+  .scan-btn { margin-left: auto; padding: 4px 10px; font-size: 11px; border: 1px solid #ff4d4d; color: #ff4d4d; background: transparent; border-radius: 4px; cursor: pointer; }
+  .update-btn { padding: 4px 8px; font-size: 11px; border: 1px solid #00e5a0; color: #00e5a0; background: transparent; border-radius: 4px; cursor: pointer; }
+
+  #map { position: fixed; top: 52px; bottom: 0; left: 0; right: 0; }
+
+  /* 凡例 */
+  .legend {
+    position: fixed; bottom: 20px; left: 12px;
+    background: rgba(7,11,18,0.92); border: 1px solid #1a2d40;
+    border-radius: 6px; padding: 8px 12px; z-index: 1000;
+    font-size: 10px; color: #e8f4ff;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">JKS-II</div>
+  <div class="area-tabs">
+    <button class="area-tab active">多摩</button>
+    <button class="area-tab">府中</button>
+  </div>
+  <button class="update-btn">更新</button>
+  <button class="scan-btn">スキャン</button>
+</header>
+
+<div id="map"></div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#00e5a0;box-shadow:0 0 4px rgba(0,229,160,0.8)"></div>standby</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff4d8d"></div>checked</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3d9bff"></div>7days</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#445060"></div>stopped</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffe04d"></div>現在地</div>
+</div>
+
+<script>
+const STATIONS = [
+  {name:"多摩一ノ宮", lat:35.65221, lng:139.44115, status:"standby", scan:1},
+  {name:"ＡＯＫＩ聖蹟桜ヶ丘店", lat:35.65185, lng:139.43947, status:"standby", scan:2},
+  {name:"聖蹟桜ヶ丘モーリン駐車場", lat:35.64960, lng:139.44426, status:"checked"},
+  {name:"タイムズ聖蹟桜ヶ丘駅前交差点", lat:35.65051, lng:139.44547, status:"standby", scan:3},
+  {name:"聖蹟桜ヶ丘駅北第２", lat:35.65252, lng:139.44595, status:"sevenday"},
+  {name:"パトリア桜ヶ丘", lat:35.65285, lng:139.44469, status:"standby"},
+  {name:"タイムズ多摩諏訪", lat:35.63418, lng:139.45078, status:"standby", scan:4},
+  {name:"タイムズ永山", lat:35.63330, lng:139.44610, status:"checked"},
+  {name:"ＵＲプラザ永山", lat:35.63182, lng:139.44723, status:"standby"},
+  {name:"多摩センター第３駐車場（小田急）", lat:35.62624, lng:139.42718, status:"standby", scan:5},
+  {name:"タイムズ多摩センター中央第１", lat:35.62174, lng:139.42417, status:"sevenday"},
+  {name:"アヴァンセ唐木田", lat:35.61578, lng:139.40835, status:"stopped"},
+];
+
+const statusColor = {
+  standby:  '#00e5a0',
+  checked:  '#ff4d8d',
+  sevenday: '#3d9bff',
+  stopped:  '#445060',
+};
+
+const statusLabel = {
+  standby:  'standby',
+  checked:  'checked ✓',
+  sevenday: '7days_rule',
+  stopped:  'stopped',
+};
+
+let map, markers = [];
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 35.638, lng: 139.445 },
+    zoom: 14,
+    disableDefaultUI: true,
+    gestureHandling: 'greedy',
+    styles: [
+      { elementType: 'geometry', stylers: [{ color: '#0d1520' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#4a6070' }] },
+      { elementType: 'labels.text.stroke', stylers: [{ color: '#070b12' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a2d40' }] },
+      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#070b12' }] },
+      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#3a5060' }] },
+      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#243850' }] },
+      { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#4a7090' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a1824' }] },
+      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#1a3040' }] },
+      { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+      { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+      { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#1a2d40' }] },
+      { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
+      { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0d1520' }] },
+    ]
+  });
+
+  // ステーションマーカー
+  STATIONS.forEach(s => {
+    const color = statusColor[s.status] || '#00e5a0';
+
+    let markerEl;
+    if (s.scan) {
+      markerEl = document.createElement('div');
+      markerEl.style.cssText = `
+        width:22px; height:22px; background:#e0182d; color:#fff;
+        font-size:13px; font-weight:bold; border-radius:50%;
+        display:flex; align-items:center; justify-content:center;
+        border:2px solid #fff; box-shadow:0 0 8px rgba(224,24,45,0.9);
+        animation:scanPulse 0.8s ease-in-out infinite;
+      `;
+      markerEl.textContent = s.scan;
+    } else {
+      markerEl = document.createElement('div');
+      markerEl.style.cssText = `
+        width:${s.status === 'standby' ? 12 : 10}px;
+        height:${s.status === 'standby' ? 12 : 10}px;
+        background:${color}; border-radius:50%;
+        border:2px solid rgba(255,255,255,0.5);
+        box-shadow:0 0 ${s.status === 'standby' ? 6 : 3}px ${color}88;
+      `;
+    }
+
+    const marker = new google.maps.marker.AdvancedMarkerElement({
+      map,
+      position: { lat: s.lat, lng: s.lng },
+      content: markerEl,
+      title: s.name
+    });
+
+    // 吹き出し
+    const infoWindow = new google.maps.InfoWindow({
+      content: `
+        <div style="background:rgba(13,21,32,0.97);border:1px solid #1a2d40;border-radius:8px;padding:10px 14px;min-width:160px;">
+          <div style="font-size:13px;font-weight:bold;color:#e8f4ff;margin-bottom:4px;">${s.name}</div>
+          <div style="font-size:11px;color:${color};margin-bottom:${s.status === 'standby' ? '8px' : '0'}">${statusLabel[s.status]}</div>
+          ${s.status === 'standby' ? '<button style="display:block;width:100%;padding:6px;background:rgba(0,229,160,0.1);border:1px solid #00e5a0;color:#00e5a0;font-size:12px;border-radius:4px;cursor:pointer;">点検</button>' : ''}
+        </div>
+      `,
+      disableAutoPan: false
+    });
+
+    markerEl.addEventListener('click', () => {
+      markers.forEach(m => m.iw.close());
+      infoWindow.open(map, marker);
+    });
+
+    marker.iw = infoWindow;
+    markers.push(marker);
+  });
+
+  // GPS現在地
+  const gpsEl = document.createElement('div');
+  gpsEl.style.cssText = `
+    width:14px; height:14px; background:#ffe04d; border-radius:50%;
+    border:2px solid rgba(255,224,77,0.4);
+    animation:gpsBlink 0.8s ease-in-out infinite;
+    box-shadow:0 0 8px rgba(255,224,77,0.8);
+  `;
+  new google.maps.marker.AdvancedMarkerElement({
+    map,
+    position: { lat: 35.648, lng: 139.443 },
+    content: gpsEl,
+    title: '現在地'
+  });
+
+  // アニメーション用CSS
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes scanPulse {
+      0%,100% { transform:scale(1); box-shadow:0 0 8px rgba(224,24,45,0.9); }
+      50% { transform:scale(1.3); box-shadow:0 0 16px rgba(224,24,45,1); }
+    }
+    @keyframes gpsBlink {
+      0%,100% { opacity:1; }
+      50% { opacity:0.2; }
+    }
+    .gm-style-iw { padding:0 !important; background:transparent !important; box-shadow:none !important; }
+    .gm-style-iw-d { overflow:hidden !important; }
+    .gm-style-iw-tc { display:none !important; }
+    .gm-ui-hover-effect { display:none !important; }
+    .gm-style .gm-style-iw-c { padding:0 !important; background:transparent !important; box-shadow:none !important; }
+  `;
+  document.head.appendChild(style);
+}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyASRe3WrsFxd7Gw7jjCXc1vajYqF8llK_k&libraries=marker&callback=initMap" async defer></script>
+</body>
+</html>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: #070b12; font-family: 'Helvetica Neue', sans-serif; }
