@@ -3,69 +3,280 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>JKS-II</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=3">
+<title>JKS-II マップ形式プレビュー</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #070b12; font-family: 'Helvetica Neue', sans-serif; }
+
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 52px;
+    background: rgba(7,11,18,0.97);
+    border-bottom: 1px solid #1a2d40;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    z-index: 1000;
+  }
+  .header-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: #00e5a0;
+    letter-spacing: 0.12em;
+  }
+  .area-tabs { display: flex; gap: 3px; margin-left: 6px; }
+  .area-tab {
+    padding: 3px 7px;
+    font-size: 10px;
+    border: 1px solid #2a3d52;
+    color: #e8f4ff;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .area-tab.active { border-color: #00e5a0; color: #00e5a0; background: rgba(0,229,160,0.08); }
+  .scan-btn {
+    margin-left: auto;
+    padding: 4px 10px;
+    font-size: 11px;
+    border: 1px solid #ff4d4d;
+    color: #ff4d4d;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .update-btn {
+    padding: 4px 8px;
+    font-size: 11px;
+    border: 1px solid #00e5a0;
+    color: #00e5a0;
+    background: transparent;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  #map {
+    position: fixed;
+    top: 52px;
+    bottom: 0; left: 0; right: 0;
+  }
+
+  /* カスタムピン */
+  .station-pin {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.6);
+    cursor: pointer;
+  }
+  .pin-standby  { background: #00e5a0; box-shadow: 0 0 6px rgba(0,229,160,0.8); }
+  .pin-checked  { background: #ff4d8d; box-shadow: 0 0 6px rgba(255,77,141,0.8); }
+  .pin-sevenday { background: #3d9bff; box-shadow: 0 0 6px rgba(61,155,255,0.8); }
+  .pin-stopped  { background: #445060; }
+  .pin-scan     { 
+    background: #e0182d; 
+    box-shadow: 0 0 10px rgba(224,24,45,0.9);
+    width: 16px; height: 16px;
+    border: 2px solid #fff;
+    animation: scanPulse 0.8s ease-in-out infinite;
+  }
+  @keyframes scanPulse {
+    0%,100% { transform: scale(1); box-shadow: 0 0 10px rgba(224,24,45,0.9); }
+    50% { transform: scale(1.3); box-shadow: 0 0 18px rgba(224,24,45,1); }
+  }
+
+  /* 吹き出し */
+  .leaflet-popup-content-wrapper {
+    background: rgba(13,21,32,0.95) !important;
+    border: 1px solid #1a2d40 !important;
+    border-radius: 8px !important;
+    color: #e8f4ff !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-content {
+    margin: 0 !important;
+    padding: 10px 14px !important;
+    min-width: 160px;
+  }
+  .leaflet-popup-tip-container { display: none; }
+  .leaflet-popup-close-button { color: #e8f4ff !important; top: 6px !important; right: 8px !important; }
+
+  .popup-name {
+    font-size: 13px;
+    font-weight: bold;
+    color: #e8f4ff;
+    margin-bottom: 4px;
+  }
+  .popup-status {
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  .popup-btn {
+    display: block;
+    width: 100%;
+    padding: 6px;
+    background: rgba(0,229,160,0.1);
+    border: 1px solid #00e5a0;
+    color: #00e5a0;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  /* GPS現在地 */
+  .gps-dot {
+    width: 14px; height: 14px;
+    background: #ffe04d;
+    border-radius: 50%;
+    border: 2px solid rgba(255,224,77,0.4);
+    animation: gpsBlink 0.8s ease-in-out infinite;
+  }
+  @keyframes gpsBlink {
+    0%,100% { opacity: 1; box-shadow: 0 0 8px rgba(255,224,77,0.8); }
+    50% { opacity: 0.3; box-shadow: none; }
+  }
+
+  /* スキャンバッジ */
+  .scan-badge-pin {
+    background: #e0182d;
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+    box-shadow: 0 0 6px rgba(224,24,45,0.8);
+    animation: scanPulse 0.8s ease-in-out infinite;
+  }
+
+  /* 凡例 */
+  .legend {
+    position: fixed;
+    bottom: 20px;
+    left: 12px;
+    background: rgba(7,11,18,0.92);
+    border: 1px solid #1a2d40;
+    border-radius: 6px;
+    padding: 8px 12px;
+    z-index: 1000;
+    font-size: 10px;
+    color: #e8f4ff;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
 </head>
 <body>
 
 <header>
   <div class="header-title">JKS-II</div>
   <div class="area-tabs">
-    <button class="area-tab active" data-area="tama" onclick="switchArea('tama')">多摩</button>
-    <button class="area-tab" data-area="fuchu" onclick="switchArea('fuchu')">府中</button>
+    <button class="area-tab active">多摩</button>
+    <button class="area-tab">府中</button>
   </div>
-  <button id="updateBtn" class="update-btn" onclick="triggerUpdate()">更新</button>
-  <button id="scanBtn" class="scan-btn" onclick="triggerScan()">スキャン</button>
+  <button class="update-btn">更新</button>
+  <button class="scan-btn">スキャン</button>
 </header>
 
-<div class="subbar">
-  <span class="subbar-label">スキャンモード:</span>
-  <button class="mode-btn active" data-mode="normal" onclick="switchScanMode('normal')">ノーマル</button>
-  <button class="mode-btn" data-mode="cluster" onclick="switchScanMode('cluster')">クラスター</button>
+<div id="map"></div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#00e5a0;box-shadow:0 0 4px rgba(0,229,160,0.8)"></div>standby</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ff4d8d"></div>checked</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3d9bff"></div>7days</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#445060"></div>stopped</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffe04d;animation:gpsBlink 0.8s infinite"></div>現在地</div>
 </div>
 
-<div class="main" id="mainArea">
-  <div class="grid-transform" id="gridTransform">
-    <div class="hex-grid" id="hexGrid"></div>
-  </div>
-</div>
+<script>
+// CartoDB DarkMatterでマップ初期化
+const map = L.map('map', {
+  center: [35.638, 139.445],
+  zoom: 14,
+  zoomControl: false
+});
 
-<div id="loadingOverlay">
-  <div class="loading-text">LOADING...</div>
-  <div class="loading-sub">データを取得中</div>
-</div>
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; CartoDB',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
 
-<div class="minimap" id="minimap">
-  <canvas id="minimapCanvas"></canvas>
-  <div class="minimap-viewport" id="minimapViewport"></div>
-  <svg class="minimap-move-icon" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="8" cy="8" r="7.5" fill="none" stroke="white" stroke-width="1"/>
-    <!-- 上矢印 -->
-    <polygon points="8,2 6,5 10,5" fill="white"/>
-    <!-- 下矢印 -->
-    <polygon points="8,14 6,11 10,11" fill="white"/>
-    <!-- 左矢印 -->
-    <polygon points="2,8 5,6 5,10" fill="white"/>
-    <!-- 右矢印 -->
-    <polygon points="14,8 11,6 11,10" fill="white"/>
-  </svg>
-</div>
+// サンプルステーションデータ（実際のデータの一部）
+const stations = [
+  {name:"多摩一ノ宮", lat:35.65221, lng:139.44115, status:"standby", scan:1},
+  {name:"ＡＯＫＩ聖蹟桜ヶ丘店", lat:35.65185, lng:139.43947, status:"standby", scan:2},
+  {name:"聖蹟桜ヶ丘モーリン駐車場", lat:35.64960, lng:139.44426, status:"checked"},
+  {name:"タイムズ聖蹟桜ヶ丘駅前交差点", lat:35.65051, lng:139.44547, status:"standby", scan:3},
+  {name:"聖蹟桜ヶ丘駅北第２", lat:35.65252, lng:139.44595, status:"sevenday"},
+  {name:"パトリア桜ヶ丘", lat:35.65285, lng:139.44469, status:"standby"},
+  {name:"タイムズ多摩諏訪", lat:35.63418, lng:139.45078, status:"standby", scan:4},
+  {name:"タイムズ永山", lat:35.63330, lng:139.44610, status:"checked"},
+  {name:"ＵＲプラザ永山", lat:35.63182, lng:139.44723, status:"standby"},
+  {name:"多摩センター第３駐車場（小田急）", lat:35.62624, lng:139.42718, status:"standby", scan:5},
+  {name:"タイムズ多摩センター中央第１", lat:35.62174, lng:139.42417, status:"sevenday"},
+  {name:"アヴァンセ唐木田", lat:35.61578, lng:139.40835, status:"stopped"},
+];
 
-<div id="gps-note" style="position:fixed;bottom:140px;left:50%;transform:translateX(-50%);background:rgba(7,11,18,0.75);color:rgba(255,224,77,0.8);font-size:10px;font-family:'Noto Sans JP',sans-serif;padding:3px 10px;border-radius:10px;pointer-events:none;z-index:99;white-space:nowrap;">※ 黄色点滅はおおよその位置です</div>
+const statusColor = {
+  standby:  '#00e5a0',
+  checked:  '#ff4d8d',
+  sevenday: '#3d9bff',
+  stopped:  '#445060',
+};
 
-<div class="overlay" id="overlay" onclick="closeDetail()"></div>
+const statusLabel = {
+  standby:  'standby',
+  checked:  'checked ✓',
+  sevenday: '7days_rule',
+  stopped:  'stopped',
+};
 
-<div class="detail-panel" id="detailPanel">
-  <div class="detail-handle"></div>
-  <button class="detail-nav" id="navBtn" onclick="openNav()">▶ ナビ</button>
-  <div class="detail-station" id="detailStation">—</div>
-  <div class="detail-cd" id="detailCd">—</div>
-  <div class="detail-vehicles" id="detailVehicles"></div>
-</div>
+stations.forEach(s => {
+  const color = statusColor[s.status] || '#00e5a0';
+  let iconHtml;
 
-<script src="app.js?v=3"></script>
+  if (s.scan) {
+    iconHtml = `<div class="scan-badge-pin">${s.scan}</div>`;
+  } else {
+    iconHtml = `<div class="station-pin pin-${s.status}"></div>`;
+  }
+
+  const icon = L.divIcon({
+    html: iconHtml,
+    className: '',
+    iconSize: s.scan ? [22, 22] : [12, 12],
+    iconAnchor: s.scan ? [11, 11] : [6, 6],
+    popupAnchor: [0, -10]
+  });
+
+  const marker = L.marker([s.lat, s.lng], { icon }).addTo(map);
+
+  const popupColor = statusColor[s.status] || '#00e5a0';
+  marker.bindPopup(`
+    <div class="popup-name">${s.name}</div>
+    <div class="popup-status" style="color:${popupColor}">${statusLabel[s.status] || s.status}</div>
+    ${s.status === 'standby' ? '<button class="popup-btn">点検</button>' : ''}
+  `, { maxWidth: 200, minWidth: 160 });
+});
+
+// GPS現在地（デモ用）
+const gpsIcon = L.divIcon({
+  html: '<div class="gps-dot"></div>',
+  className: '',
+  iconSize: [14, 14],
+  iconAnchor: [7, 7]
+});
+L.marker([35.648, 139.443], { icon: gpsIcon }).addTo(map);
+</script>
 </body>
 </html>
