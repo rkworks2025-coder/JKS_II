@@ -272,18 +272,15 @@ function initStationLabel() {
         padding:2px 5px;
         border-radius:3px;
         border:1px solid ${this.color}66;
-        white-space:nowrap;
+        white-space:normal;
+        word-break:break-all;
         pointer-events:none;
         transform:translate(-50%,-190%);
-        max-width:90px;
-        overflow:hidden;
-        text-overflow:ellipsis;
-        line-height:1.3;
+        max-width:72px;
+        line-height:1.4;
+        text-align:center;
       `;
-      div.textContent = this.station.station_name
-        .replace('タイムズ','T ')
-        .replace('駐車場','P')
-        .replace('第','#');
+      div.textContent = this.station.station_name;
       this.div = div;
       this.getPanes().floatPane.appendChild(div);
     }
