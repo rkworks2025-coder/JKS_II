@@ -152,6 +152,7 @@ function initMap() {
     gestureHandling: 'greedy',
     styles: MAP_STYLES
   });
+  initStationLabel();
   fetchMapData();
   startGps();
   switchScanMode(scanMode);
@@ -193,6 +194,7 @@ function makeGpsSvg() {
 function clearMarkers() {
   markerMap.forEach(m => m.setMap(null));
   markerMap.clear();
+  clearLabels();
   clearScanBadges();
 }
 
@@ -235,6 +237,8 @@ function renderMarkers() {
     if (openIW) { openIW.close(); openIW = null; }
     closeDetail();
   });
+
+  renderLabels();
 }
 
 function buildInfoWindowContent(s) {
@@ -245,7 +249,77 @@ function buildInfoWindowContent(s) {
   </div>`;
 }
 
-// ===== データ取得 =====
+// ===== ステーション名ラベル =====
+let labelOverlays = [];
+let StationLabel = null;
+
+function initStationLabel() {
+  StationLabel = class extends google.maps.OverlayView {
+    constructor(station, color) {
+      super();
+      this.station = station;
+      this.color = color;
+      this.div = null;
+    }
+    onAdd() {
+      const div = document.createElement('div');
+      div.style.cssText = `
+        position:absolute;
+        background:rgba(7,11,18,0.85);
+        color:${this.color};
+        font-size:9px;
+        font-family:'Noto Sans JP',sans-serif;
+        padding:2px 5px;
+        border-radius:3px;
+        border:1px solid ${this.color}66;
+        white-space:nowrap;
+        pointer-events:none;
+        transform:translate(-50%,-190%);
+        max-width:90px;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        line-height:1.3;
+      `;
+      div.textContent = this.station.station_name
+        .replace('タイムズ','T ')
+        .replace('駐車場','P')
+        .replace('第','#');
+      this.div = div;
+      this.getPanes().floatPane.appendChild(div);
+    }
+    draw() {
+      const proj = this.getProjection();
+      if (!proj || !this.div) return;
+      const pos = proj.fromLatLngToDivPixel(
+        new google.maps.LatLng(this.station.lat, this.station.lng)
+      );
+      this.div.style.left = pos.x + 'px';
+      this.div.style.top  = pos.y + 'px';
+    }
+    onRemove() {
+      if (this.div) { this.div.parentNode.removeChild(this.div); this.div = null; }
+    }
+  };
+}
+
+function clearLabels() {
+  labelOverlays.forEach(l => l.setMap(null));
+  labelOverlays = [];
+}
+
+function renderLabels() {
+  clearLabels();
+  if (!StationLabel) return;
+  STATIONS.forEach(s => {
+    if (s.status === 'checked' || s.status === 'unnecessary') return;
+    const color = STATUS_COLOR[s.status] || '#445060';
+    const label = new StationLabel(s, color);
+    label.setMap(gMap);
+    labelOverlays.push(label);
+  });
+}
+
+
 function applyMapData(stations) {
   stations.forEach(st => gasStationMap.set(st.stationCd, st));
   STATIONS.forEach(s => {
