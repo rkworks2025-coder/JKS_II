@@ -3,154 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>JKS-II マップ形式プレビュー</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; background: #070b12; font-family: 'Helvetica Neue', sans-serif; }
-  header {
-    position: fixed; top: 0; left: 0; right: 0; height: 52px;
-    background: rgba(7,11,18,0.97); border-bottom: 1px solid #1a2d40;
-    display: flex; align-items: center; padding: 0 12px; gap: 8px; z-index: 1000;
-  }
-  .header-title { font-size: 13px; font-weight: bold; color: #00e5a0; letter-spacing: 0.12em; }
-  .area-tabs { display: flex; gap: 3px; margin-left: 6px; }
-  .area-tab { padding: 3px 7px; font-size: 10px; border: 1px solid #2a3d52; color: #e8f4ff; background: transparent; border-radius: 4px; }
-  .area-tab.active { border-color: #00e5a0; color: #00e5a0; background: rgba(0,229,160,0.08); }
-  .scan-btn { margin-left: auto; padding: 4px 10px; font-size: 11px; border: 1px solid #ff4d4d; color: #ff4d4d; background: transparent; border-radius: 4px; }
-  .update-btn { padding: 4px 8px; font-size: 11px; border: 1px solid #00e5a0; color: #00e5a0; background: transparent; border-radius: 4px; }
-  #gmap { position: fixed !important; top: 52px !important; bottom: 0 !important; left: 0 !important; right: 0 !important; width: 100% !important; height: calc(100% - 52px) !important; }
-  .legend {
-    position: fixed; bottom: 20px; left: 12px;
-    background: rgba(7,11,18,0.92); border: 1px solid #1a2d40;
-    border-radius: 6px; padding: 8px 12px; z-index: 1000; font-size: 10px; color: #e8f4ff;
-  }
-  .legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  @keyframes scanPulse {
-    0%,100% { transform: scale(1); } 50% { transform: scale(1.4); }
-  }
-  @keyframes gpsBlink {
-    0%,100% { opacity:1; } 50% { opacity:0.2; }
-  }
-  /* InfoWindowのスタイル上書き */
-  .gm-style .gm-style-iw-c { padding: 0 !important; background: transparent !important; box-shadow: none !important; border-radius: 8px !important; overflow: hidden !important; }
-  .gm-style .gm-style-iw-d { overflow: hidden !important; }
-  .gm-style .gm-style-iw-tc::after { background: #1a2d40 !important; }
-  .gm-ui-hover-effect { display: none !important; }
-</style>
+<title>JKS-II</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
+
 <header>
   <div class="header-title">JKS-II</div>
   <div class="area-tabs">
-    <button class="area-tab active">多摩</button>
-    <button class="area-tab">府中</button>
+    <button class="area-tab active" data-area="tama" onclick="switchArea('tama')">多摩</button>
+    <button class="area-tab" data-area="fuchu" onclick="switchArea('fuchu')">府中</button>
   </div>
-  <button class="update-btn">更新</button>
-  <button class="scan-btn">スキャン</button>
+  <button id="updateBtn" class="update-btn" onclick="triggerUpdate()">更新</button>
+  <button id="scanBtn" class="scan-btn" onclick="triggerScan()">スキャン</button>
 </header>
-<div id="gmap"></div>
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:#00e5a0"></div>standby</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#ff4d8d"></div>checked</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#3d9bff"></div>7days</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#445060"></div>stopped</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#ffe04d"></div>現在地</div>
+
+<div class="subbar">
+  <span class="subbar-label">スキャンモード:</span>
+  <button class="mode-btn active" data-mode="normal" onclick="switchScanMode('normal')">ノーマル</button>
+  <button class="mode-btn" data-mode="cluster" onclick="switchScanMode('cluster')">クラスター</button>
 </div>
-<script>
-const STATIONS = [
-  {name:"多摩一ノ宮", lat:35.65221, lng:139.44115, status:"standby", scan:1},
-  {name:"ＡＯＫＩ聖蹟桜ヶ丘店", lat:35.65185, lng:139.43947, status:"standby", scan:2},
-  {name:"聖蹟桜ヶ丘モーリン駐車場", lat:35.64960, lng:139.44426, status:"checked"},
-  {name:"タイムズ聖蹟桜ヶ丘駅前交差点", lat:35.65051, lng:139.44547, status:"standby", scan:3},
-  {name:"聖蹟桜ヶ丘駅北第２", lat:35.65252, lng:139.44595, status:"sevenday"},
-  {name:"パトリア桜ヶ丘", lat:35.65285, lng:139.44469, status:"standby"},
-  {name:"タイムズ多摩諏訪", lat:35.63418, lng:139.45078, status:"standby", scan:4},
-  {name:"タイムズ永山", lat:35.63330, lng:139.44610, status:"checked"},
-  {name:"ＵＲプラザ永山", lat:35.63182, lng:139.44723, status:"standby"},
-  {name:"多摩センター第３駐車場", lat:35.62624, lng:139.42718, status:"standby", scan:5},
-  {name:"タイムズ多摩センター中央第１", lat:35.62174, lng:139.42417, status:"sevenday"},
-  {name:"アヴァンセ唐木田", lat:35.61578, lng:139.40835, status:"stopped"},
-];
 
-const STATUS_COLOR = { standby:'#00e5a0', checked:'#ff4d8d', sevenday:'#3d9bff', stopped:'#445060' };
-const STATUS_LABEL = { standby:'standby', checked:'checked ✓', sevenday:'7days_rule', stopped:'stopped' };
+<div id="gmap"></div>
 
-function makeSvgIcon(color, size, scan) {
-  if (scan) {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-      <circle cx="12" cy="12" r="11" fill="#e0182d" stroke="white" stroke-width="2"/>
-      <text x="12" y="17" text-anchor="middle" fill="white" font-size="13" font-weight="bold" font-family="sans-serif">${scan}</text>
-    </svg>`;
-    return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(24, 24), anchor: new google.maps.Point(12, 12) };
-  }
-  const s = size;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}">
-    <circle cx="${s/2}" cy="${s/2}" r="${s/2-1}" fill="${color}" stroke="rgba(255,255,255,0.5)" stroke-width="1.5"/>
-  </svg>`;
-  return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(s, s), anchor: new google.maps.Point(s/2, s/2) };
-}
+<div id="loadingOverlay">
+  <div class="loading-text">LOADING...</div>
+  <div class="loading-sub">データを取得中</div>
+</div>
 
-function makeGpsIcon() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16">
-    <circle cx="8" cy="8" r="6" fill="#ffe04d" stroke="rgba(255,224,77,0.4)" stroke-width="3"/>
-  </svg>`;
-  return { url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg), scaledSize: new google.maps.Size(16, 16), anchor: new google.maps.Point(8, 8) };
-}
+<div id="gps-note">※ 黄色点滅はおおよその位置です</div>
 
-function initMap() {
-  const gMap = new google.maps.Map(document.getElementById('gmap'), {
-    center: { lat: 35.638, lng: 139.445 },
-    zoom: 14,
-    disableDefaultUI: true,
-    gestureHandling: 'greedy',
-    styles: [
-      { elementType: 'geometry', stylers: [{ color: '#0d1520' }] },
-      { elementType: 'labels.text.fill', stylers: [{ color: '#4a6070' }] },
-      { elementType: 'labels.text.stroke', stylers: [{ color: '#070b12' }] },
-      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#1a2d40' }] },
-      { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#070b12' }] },
-      { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#6a8090' }] },
-      { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#243850' }] },
-      { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#6a9090' }] },
-      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0a1824' }] },
-      { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#1a3040' }] },
-      { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-      { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-      { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#0d1520' }] },
-      { featureType: 'administrative', elementType: 'geometry.stroke', stylers: [{ color: '#1a2d40' }] },
-      { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#5a7080' }] },
-    ]
-  });
+<div class="overlay" id="overlay" onclick="closeDetail()"></div>
 
-  let openIW = null;
+<div class="detail-panel" id="detailPanel">
+  <div class="detail-handle"></div>
+  <button class="detail-nav" id="navBtn" onclick="openNav()">▶ ナビ</button>
+  <div class="detail-station" id="detailStation">—</div>
+  <div class="detail-cd" id="detailCd">—</div>
+  <div class="detail-vehicles" id="detailVehicles"></div>
+</div>
 
-  STATIONS.forEach(s => {
-    const color = STATUS_COLOR[s.status] || '#00e5a0';
-    const size = s.status === 'standby' ? 14 : 10;
-    const icon = makeSvgIcon(color, size, s.scan);
+<div id="jks2-toast"></div>
 
-    const marker = new google.maps.Marker({ map: gMap, position: { lat: s.lat, lng: s.lng }, icon, title: s.name });
-
-    const iw = new google.maps.InfoWindow({
-      content: `<div style="background:rgba(13,21,32,0.97);border:1px solid #1a2d40;padding:10px 14px;min-width:150px;">
-        <div style="font-size:13px;font-weight:bold;color:#e8f4ff;margin-bottom:4px;">${s.name}</div>
-        <div style="font-size:11px;color:${color};margin-bottom:${s.status==='standby'?'8px':'0'}">${STATUS_LABEL[s.status]}</div>
-        ${s.status==='standby'?'<button style="width:100%;padding:6px;background:rgba(0,229,160,0.1);border:1px solid #00e5a0;color:#00e5a0;font-size:12px;border-radius:4px;cursor:pointer;">点検</button>':''}
-      </div>`
-    });
-
-    marker.addListener('click', () => {
-      if (openIW) openIW.close();
-      iw.open(gMap, marker);
-      openIW = iw;
-    });
-  });
-
-  // GPS現在地
-  new google.maps.Marker({ map: gMap, position: { lat: 35.648, lng: 139.443 }, icon: makeGpsIcon(), title: '現在地' });
-}
-</script>
+<script src="app.js?v=4"></script>
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyASRe3WrsFxd7Gw7jjCXc1vajYqF8llK_k&callback=initMap" async defer></script>
 </body>
 </html>
