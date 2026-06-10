@@ -276,11 +276,14 @@ function initStationLabel() {
         word-break:break-all;
         pointer-events:none;
         transform:translate(-50%,-190%);
-        max-width:72px;
+        max-width:60px;
         line-height:1.4;
         text-align:center;
       `;
-      div.textContent = this.station.station_name;
+      div.textContent = this.station.station_name
+        .replace('タイムズ','T ')
+        .replace('駐車場','P')
+        .replace('第','#');
       this.div = div;
       this.getPanes().floatPane.appendChild(div);
     }
